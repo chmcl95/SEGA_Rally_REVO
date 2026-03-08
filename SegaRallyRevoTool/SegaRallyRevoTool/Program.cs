@@ -1,6 +1,6 @@
-﻿using System;
+﻿using CommandLine;
+using System;
 using System.IO;
-using System.IO.Compression;
 
 namespace SegaRallyRevoTool
 {
@@ -8,31 +8,74 @@ namespace SegaRallyRevoTool
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            Console.WriteLine("Sega Rally Revo Tool - by chmcl95");
+            Console.WriteLine();
 
-            String srcPath = @"D:\Hack\SEGAPC\SegaRallyRevo\git\sample\livery\livery36_data.sbf";
-            string destPath = $@"{Path.GetDirectoryName(srcPath)}\{Path.GetFileNameWithoutExtension(srcPath)}_{Path.GetExtension(srcPath)}";
-            using (FileStream srcFileStream = new FileStream(srcPath, FileMode.Open, FileAccess.Read))
-            using (FileStream destFileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write))
-            using (ZLibStream decompStream = new ZLibStream(srcFileStream, CompressionMode.Decompress))
+            Parser.Default.ParseArguments<UnpackVerbs, PackVerbs>(args)
+                .WithParsed<UnpackVerbs>(Unpack)
+                .WithParsed<PackVerbs>(Pack);
+        }
+
+        public static void Unpack(UnpackVerbs options)
+        {
+            if (!File.Exists(options.InputPath))
             {
-                byte[] bytes = new byte[4];
-                srcFileStream.ReadExactly(bytes);
-                uint magic = BitConverter.ToUInt32(bytes, 0x00);
-                if (magic != 0x315A4253)
-                {
-                    return;
-                }
-                srcFileStream.ReadExactly(bytes);
-                int decompressSize = BitConverter.ToInt32(bytes, 0x00);
-
-                // decompress
-                byte[] decompedData = new byte[decompressSize];
-                decompStream.ReadExactly(decompedData, 0x00, decompressSize);
-                destFileStream.Write(decompedData);
+                Console.WriteLine($"Provided STR0.BIN or STR1.BIN or STR2.BIN or STR3.BIN '{options.InputPath}' does not exist.");
+                return;
             }
+            string outputPath = options.OutputPath;
+            if (string.IsNullOrEmpty(options.OutputPath))
+            {
+                outputPath = $"{Path.GetDirectoryName(options.InputPath)}\\extracted";
+            }
+
+            Unpacker unpacker = new Unpacker(options.InputPath, outputPath);
+            unpacker.Unpack();
 
             return;
         }
+
+        public static void Pack(PackVerbs options)
+        {
+            if (!Directory.Exists(options.InputPath))
+            {
+                Console.WriteLine($"Provided STR0.BIN or STR1.BIN or STR2.BIN or STR3.BIN '{options.InputPath}' does not exist.");
+                return;
+            }
+
+            string outputPath = options.OutputPath;
+            if (string.IsNullOrEmpty(options.OutputPath))
+            {
+                outputPath = $"{Path.GetDirectoryName(options.InputPath)}\\packed";
+            }
+
+            //Pactcher patcher = new Pactcher(options.ElfPath, options.InputPath, outputPath);
+            //patcher.Patch();
+
+            return;
+        }
+    }
+
+
+    [Verb("unpack", HelpText = "Unpacks SBF file.  Files are extract in \"extracted\" folder.(Deafult)")]
+    public class UnpackVerbs
+    {
+        [Option('i', "input", Required = true, HelpText = "Input .BIN file like STR1.BIN")]
+        public string InputPath { get; set; }
+
+        [Option('o', "output", Required = false, HelpText = "Output directory for the extracted files.")]
+        public string OutputPath { get; set; }
+
+    }
+
+    [Verb("pack", HelpText = "Pack SBF file .Files are generat in \"packed\" folder.(Deafult)")]
+    public class PackVerbs
+    {
+        [Option('i', "input", Required = true, HelpText = "Input Directry. Need unocked SBF files.")]
+        public string InputPath { get; set; }
+
+        [Option('o', "output", Required = false, HelpText = "Output directory for the recreate SBF files.")]
+        public string OutputPath { get; set; }
+
     }
 }

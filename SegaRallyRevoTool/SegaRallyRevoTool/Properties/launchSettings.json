@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SegaRallyRevoTool": {
+      "commandName": "Project",
+      "commandLineArgs": "unpack -r DCPROTO -e \"D:\\Hack\\SEGAPC\\SegaGT\\data\\DC_proto\\1ST_READ.BIN\" -i \"D:\\Hack\\SEGAPC\\SegaGT\\data\\DC_proto\\STR1.BIN\""
+    }
+  }
+}
