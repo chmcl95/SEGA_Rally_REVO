@@ -94,7 +94,7 @@ namespace SegaRallyRevoTool
                 }
 
                 // SBF Header
-                bytes = new byte[0x8 * length + 0x14 + 4];
+                bytes = new byte[entrys[0].offset];
                 sbfFileStream.Seek(0x00, SeekOrigin.Begin);
                 sbfFileStream.Read(bytes, 0x00, bytes.Length);
                 using (FileStream sbfHeader = new FileStream($@"{metaDataPath}\_header.bin", FileMode.Create, FileAccess.Write))

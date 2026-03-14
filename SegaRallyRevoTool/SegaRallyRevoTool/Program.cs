@@ -49,8 +49,8 @@ namespace SegaRallyRevoTool
                 outputPath = $"{Path.GetDirectoryName(options.InputPath)}\\packed";
             }
 
-            //Pactcher patcher = new Pactcher(options.ElfPath, options.InputPath, outputPath);
-            //patcher.Patch();
+            Packer packer = new Packer(options.InputPath, outputPath);
+            packer.Pack();
 
             return;
         }
@@ -66,6 +66,9 @@ namespace SegaRallyRevoTool
         [Option('o', "output", Required = false, HelpText = "Output directory for the extracted files.")]
         public string OutputPath { get; set; }
 
+        //[Option("nc", Required = false, HelpText = "Only decompressing SBF files.")]
+        //public string OnlyDecompress { get; set; }
+
     }
 
     [Verb("pack", HelpText = "Pack SBF file .Files are generat in \"packed\" folder.(Deafult)")]
@@ -77,8 +80,8 @@ namespace SegaRallyRevoTool
         [Option('o', "output", Required = false, HelpText = "Output directory for the recreate SBF files.")]
         public string OutputPath { get; set; }
 
-        [Option("nc", Required = false, HelpText = "Disableo compressing SBF files.")]
-        public string DisableCompress { get; set; }
+        //[Option("nc", Required = false, HelpText = "Disableo compressing SBF files.")]
+        //public string DisableCompress { get; set; }
 
 
     }
