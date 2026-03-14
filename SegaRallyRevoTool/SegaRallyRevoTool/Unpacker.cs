@@ -13,8 +13,7 @@ namespace SegaRallyRevoTool
         private string _inputPath;
         private string _destPath;
 
-
-        public Unpacker(string revision, string exePath, string inputPath, string outputPath)
+        public Unpacker(string inputPath, string outputPath)
         {
             _inputPath = inputPath;
             _destPath = outputPath;
@@ -24,14 +23,15 @@ namespace SegaRallyRevoTool
         {
             Console.WriteLine("Starting to unpack...");
 
-            string destPath = $@"{ _destPath}\{Path.GetFileNameWithoutExtension(_inputPath)}";
-            Directory.CreateDirectory(destPath);
-            string headerPath = $@"{destPath}\header";
-            Directory.CreateDirectory(headerPath);
+            string destDirectoryPath = $@"{ _destPath}\{Path.GetFileNameWithoutExtension(_inputPath)}";
+            Directory.CreateDirectory(destDirectoryPath);
+            string metaDataPath = $@"{destDirectoryPath}\_meta";
+            Directory.CreateDirectory(metaDataPath);
+
+            List<string> destRelativePaths = new List<string>();
 
             // SBF file
-            using (FileStream sbfFileStream = new FileStream(destPath, FileMode.Open, FileAccess.Read))
-            using (FileStream headerFileStream = new FileStream(headerPath, FileMode.Create, FileAccess.Write))
+            using (FileStream sbfFileStream = new FileStream(_inputPath, FileMode.Open, FileAccess.Read))
             {
                 sbfFileStream.Seek(0x14, SeekOrigin.Begin);
                 byte[] bytes = new byte[4];
@@ -53,23 +53,62 @@ namespace SegaRallyRevoTool
 
                 for (int i = 0; i < length; i++)
                 {
+                    long endAddress = sbfFileStream.Length;
+                    if (i < length-1)
+                    {
+                        endAddress = entrys[i + 1].offset;
+                    }
+
                     Container container = new Container();
                     sbfFileStream.Seek(entrys[i].offset, SeekOrigin.Begin);
-                    container.Unpack(sbfFileStream, headerFileStream);
+                    using (FileStream metaDataFileStream = new FileStream($@"{metaDataPath}\{i:D8}.HEAD", FileMode.Create, FileAccess.Write))
+                    {
+
+                        container.Unpack(sbfFileStream, metaDataFileStream);
+                    }
+
+                    long size = endAddress - sbfFileStream.Position;
+                    if(size < 1)
+                    {
+                        continue;
+                    }
+
+                    bytes = new byte[size];
+                    sbfFileStream.Read(bytes, 0x00, bytes.Length);
+                    string extension = "BIN";
+                    // detection DDS
+                    if (bytes[0]==0x44 && bytes[1] == 0x44 && bytes[2] == 0x53 && bytes[3] == 0x20)
+                    {
+                        extension = "DDS";
+                    }
+                    if(!Directory.Exists($@"{destDirectoryPath}\{container.type}"))
+                    {
+                        Directory.CreateDirectory($@"{destDirectoryPath}\{container.type}");
+                    }
+                    string destRelativePath = $@"{container.type}\{i:D8}.{extension}";
+                    using (FileStream extractedFileStream = new FileStream($@"{destDirectoryPath}\{destRelativePath}", FileMode.Create, FileAccess.Write))
+                    {
+                        extractedFileStream.Write(bytes);
+                    }
+                    destRelativePaths.Add(destRelativePath);
                 }
 
-
-                /*
                 // SBF Header
-                int headerSize = 0x8 * length + 0x14 + 4;
-                bytes = new byte[headerSize];
+                bytes = new byte[0x8 * length + 0x14 + 4];
                 sbfFileStream.Seek(0x00, SeekOrigin.Begin);
-                sbfFileStream.Read(bytes, 0x00, headerSize);
-                using (FileStream sbfHeader = new FileStream($@"{headerPath}\header.bin", FileMode.Create, FileAccess.Write))
+                sbfFileStream.Read(bytes, 0x00, bytes.Length);
+                using (FileStream sbfHeader = new FileStream($@"{metaDataPath}\_header.bin", FileMode.Create, FileAccess.Write))
                 {
                     sbfHeader.Write(bytes);
                 }
-                */
+                // Order of Conatiner
+                using (StreamWriter orderTextWriter = File.CreateText($@"{metaDataPath}\_order.txt"))
+                {
+                    foreach (string _path in destRelativePaths)
+                    {
+                        orderTextWriter.WriteLine(_path);
+                    }
+                }
 
             }
 

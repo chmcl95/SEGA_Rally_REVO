@@ -75,29 +75,36 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
 
     public class Container
     {
-        int type;
-        uint unk0x04;
-        int size;
-        /*
-        uint unk0x0C;
-        uint unk0x10;
-        uint unk0x14;
-        uint unk0x18;
-        */
+        public int type;
+        public uint unk0x04;
+        public int unk0x08;
+        public uint unk0x0C;
+        public uint unk0x10;
+        public uint unk0x14;
+        public uint unk0x18;
 
-        public bool Unpack(FileStream sbfFileStream, FileStream headerFileStream)
+        public bool Unpack(FileStream sbfFileStream, FileStream metaDataFileStream)
         {
-            byte[] bytes = new byte[4];
+            byte[] bytes = new byte[0x1C];
             try
             {
-                sbfFileStream.Read(bytes, 0x00, 4);
+                sbfFileStream.Read(bytes, 0x00, 0x1C);
+                metaDataFileStream.Write(bytes);
+
                 type = BitConverter.ToInt32(bytes, 0x00);
-                sbfFileStream.Read(bytes, 0x00, 4);
-                unk0x04 = BitConverter.ToUInt32(bytes, 0x00);
-                sbfFileStream.Read(bytes, 0x00, 4);
-                size = BitConverter.ToInt32(bytes, 0x00);
+                unk0x04 = BitConverter.ToUInt32(bytes, 0x04);
+                unk0x08 = BitConverter.ToInt32(bytes, 0x08);
+                unk0x0C = BitConverter.ToUInt32(bytes, 0x0C);
+                unk0x10 = BitConverter.ToUInt32(bytes, 0x10);
+                unk0x14 = BitConverter.ToUInt32(bytes, 0x14);
+                unk0x18 = BitConverter.ToUInt32(bytes, 0x18);
 
-
+                if(type == 4)
+                {
+                    bytes = new byte[0x28];
+                    sbfFileStream.Read(bytes, 0x00, bytes.Length);
+                    metaDataFileStream.Write(bytes);
+                }
 
                 return false;
             }
@@ -111,10 +118,12 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
         {
             try
             {
-                byte[] bytes = BitConverter.GetBytes(unk0x00);
-                fileStream.Write(bytes);
-                bytes = BitConverter.GetBytes(offset);
-                fileStream.Write(bytes);
+                //byte[] bytes = BitConverter.GetBytes(type);
+                //fileStream.Write(bytes);
+                //bytes = BitConverter.GetBytes(unk0x04);
+                //fileStream.Write(bytes);
+                //bytes = BitConverter.GetBytes(size);
+                //fileStream.Write(bytes);
                 return false;
             }
             catch

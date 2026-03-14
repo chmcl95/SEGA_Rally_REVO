@@ -20,7 +20,7 @@ namespace SegaRallyRevoTool
         {
             if (!File.Exists(options.InputPath))
             {
-                Console.WriteLine($"Provided STR0.BIN or STR1.BIN or STR2.BIN or STR3.BIN '{options.InputPath}' does not exist.");
+                Console.WriteLine($"'{options.InputPath}' does not exist.");
                 return;
             }
             string outputPath = options.OutputPath;
@@ -39,7 +39,7 @@ namespace SegaRallyRevoTool
         {
             if (!Directory.Exists(options.InputPath))
             {
-                Console.WriteLine($"Provided STR0.BIN or STR1.BIN or STR2.BIN or STR3.BIN '{options.InputPath}' does not exist.");
+                Console.WriteLine($"'{options.InputPath}' does not exist.");
                 return;
             }
 
@@ -76,6 +76,10 @@ namespace SegaRallyRevoTool
 
         [Option('o', "output", Required = false, HelpText = "Output directory for the recreate SBF files.")]
         public string OutputPath { get; set; }
+
+        [Option("nc", Required = false, HelpText = "Disableo compressing SBF files.")]
+        public string DisableCompress { get; set; }
+
 
     }
 }

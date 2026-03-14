@@ -2,7 +2,7 @@
   "profiles": {
     "SegaRallyRevoTool": {
       "commandName": "Project",
-      "commandLineArgs": "unpack -r DCPROTO -e \"D:\\Hack\\SEGAPC\\SegaGT\\data\\DC_proto\\1ST_READ.BIN\" -i \"D:\\Hack\\SEGAPC\\SegaGT\\data\\DC_proto\\STR1.BIN\""
+      "commandLineArgs": "unpack -i \"D:\\Hack\\SEGAPC\\SegaRallyRevo\\format\\archive\\test\\sbf\\pack_data_unpack.sbf\" -o \"D:\\Hack\\SEGAPC\\SegaRallyRevo\\format\\archive\\test\\extracted\""
     }
   }
 }

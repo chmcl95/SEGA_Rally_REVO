@@ -37,12 +37,19 @@ typedef struct Container {
     uint unk0x10;
     uint unk0x14;
     uint unk0x18;
-/*    if(type==4){
-        // DDS description. Addtionaly Data.
-        DDSDscriptor DDSDscriptor;
+    switch(type){
+        case 4:
+            // DDS description. Addtionaly Data.
+            DDSDscriptor ddsDscriptor;
+            byte blob[size-0x44];
+            break;
+        case 5:
+            byte blob[size];
+            break;
+        default:
+            Printf("Detect Unknown Type: %d address:0x%08x\r\n", type, FTell());
+            byte blob[size];
     }
-  */  
-    byte blob[size];
 };
 
 // ----
