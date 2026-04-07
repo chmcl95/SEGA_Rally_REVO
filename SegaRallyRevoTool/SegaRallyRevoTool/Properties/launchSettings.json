@@ -2,7 +2,7 @@
   "profiles": {
     "SegaRallyRevoTool": {
       "commandName": "Project",
-      "commandLineArgs": "pack -i \"D:\\Hack\\SEGAPC\\SegaRallyRevo\\format\\archive\\test\\extracted\\loading_alpine1_data\""
+      "commandLineArgs": "unpack -i \"D:\\Hack\\SEGAPC\\SegaRallyRevo\\format\\archive\\liveries\\_SBF\\livery68_data.sbf\" -o \"D:\\Hack\\SEGAPC\\SegaRallyRevo\\format\\archive\\test\\extracted\""
     }
   }
 }

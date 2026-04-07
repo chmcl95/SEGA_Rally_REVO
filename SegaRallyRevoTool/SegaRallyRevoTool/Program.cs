@@ -29,7 +29,7 @@ namespace SegaRallyRevoTool
                 outputPath = $"{Path.GetDirectoryName(options.InputPath)}\\extracted";
             }
 
-            Unpacker unpacker = new Unpacker(options.InputPath, outputPath);
+            Unpacker unpacker = new Unpacker(options.InputPath, outputPath, options.OnlyDecompress);
             unpacker.Unpack();
 
             return;
@@ -66,8 +66,8 @@ namespace SegaRallyRevoTool
         [Option('o', "output", Required = false, HelpText = "Output directory for the extracted files.")]
         public string OutputPath { get; set; }
 
-        //[Option("nc", Required = false, HelpText = "Only decompressing SBF files.")]
-        //public string OnlyDecompress { get; set; }
+        [Option("decomp", Required = false, HelpText = "Only decompressing SBF files.")]
+        public bool OnlyDecompress { get; set; }
 
     }
 
@@ -80,7 +80,7 @@ namespace SegaRallyRevoTool
         [Option('o', "output", Required = false, HelpText = "Output directory for the recreate SBF files.")]
         public string OutputPath { get; set; }
 
-        //[Option("nc", Required = false, HelpText = "Disableo compressing SBF files.")]
+        //[Option("nocomp", Required = false, HelpText = "Disableo compressing SBF files.")]
         //public string DisableCompress { get; set; }
 
 

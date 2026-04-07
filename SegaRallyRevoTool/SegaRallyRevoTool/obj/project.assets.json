@@ -2,6 +2,40 @@
   "version": 3,
   "targets": {
     "net5.0": {
+      "AuroraLib.Compression/2.0.0": {
+        "type": "package",
+        "dependencies": {
+          "AuroraLib.Core": "1.7.0",
+          "AuroraLib.Core.Format": "1.0.3"
+        },
+        "compile": {
+          "lib/netstandard2.1/AuroraLib.Compression.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard2.1/AuroraLib.Compression.dll": {}
+        }
+      },
+      "AuroraLib.Core/1.7.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Runtime.CompilerServices.Unsafe": "6.1.2"
+        },
+        "compile": {
+          "lib/netstandard2.1/AuroraLib.Core.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard2.1/AuroraLib.Core.dll": {}
+        }
+      },
+      "AuroraLib.Core.Format/1.0.3": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.1/AuroraLib.Core.Format.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard2.1/AuroraLib.Core.Format.dll": {}
+        }
+      },
       "CommandLineParser/2.9.1": {
         "type": "package",
         "compile": {
@@ -10,10 +44,93 @@
         "runtime": {
           "lib/netstandard2.0/CommandLine.dll": {}
         }
+      },
+      "System.Runtime.CompilerServices.Unsafe/6.1.2": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll": {}
+        },
+        "build": {
+          "buildTransitive/netcoreapp2.0/System.Runtime.CompilerServices.Unsafe.targets": {}
+        }
       }
     }
   },
   "libraries": {
+    "AuroraLib.Compression/2.0.0": {
+      "sha512": "030C2VvAnlfqxHjOVWBxfp9nNcft0nSh5+o4m1iZUiQMbGm6Co+gbt3mHX9GW0bTqgSbv65RlMX5M246YBRXXw==",
+      "type": "package",
+      "path": "auroralib.compression/2.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "auroralib.compression.2.0.0.nupkg.sha512",
+        "auroralib.compression.nuspec",
+        "icon.png",
+        "lib/net10.0/AuroraLib.Compression.dll",
+        "lib/net10.0/AuroraLib.Compression.xml",
+        "lib/net472/AuroraLib.Compression.dll",
+        "lib/net472/AuroraLib.Compression.xml",
+        "lib/net6.0/AuroraLib.Compression.dll",
+        "lib/net6.0/AuroraLib.Compression.xml",
+        "lib/net8.0/AuroraLib.Compression.dll",
+        "lib/net8.0/AuroraLib.Compression.xml",
+        "lib/netstandard2.0/AuroraLib.Compression.dll",
+        "lib/netstandard2.0/AuroraLib.Compression.xml",
+        "lib/netstandard2.1/AuroraLib.Compression.dll",
+        "lib/netstandard2.1/AuroraLib.Compression.xml"
+      ]
+    },
+    "AuroraLib.Core/1.7.0": {
+      "sha512": "dfDKgprKRGthtu5u77Qq0RTj8PD52AnaspwuP+Gpt16ooTS85qkVtYXHqbaGa1q9UHf7i+l2ozUHqEPsXPED5w==",
+      "type": "package",
+      "path": "auroralib.core/1.7.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "auroralib.core.1.7.0.nupkg.sha512",
+        "auroralib.core.nuspec",
+        "icon.png",
+        "lib/net10.0/AuroraLib.Core.dll",
+        "lib/net10.0/AuroraLib.Core.xml",
+        "lib/net472/AuroraLib.Core.dll",
+        "lib/net472/AuroraLib.Core.xml",
+        "lib/net6.0/AuroraLib.Core.dll",
+        "lib/net6.0/AuroraLib.Core.xml",
+        "lib/net8.0/AuroraLib.Core.dll",
+        "lib/net8.0/AuroraLib.Core.xml",
+        "lib/netstandard2.0/AuroraLib.Core.dll",
+        "lib/netstandard2.0/AuroraLib.Core.xml",
+        "lib/netstandard2.1/AuroraLib.Core.dll",
+        "lib/netstandard2.1/AuroraLib.Core.xml"
+      ]
+    },
+    "AuroraLib.Core.Format/1.0.3": {
+      "sha512": "gfXzsfdlLm+j71mt+yw9cEMNaR0hrQcICfNpBNNRBqy4Jj5rxb8rEXhPIV/63rgprgTzZ574RV834YTgIEnecQ==",
+      "type": "package",
+      "path": "auroralib.core.format/1.0.3",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "auroralib.core.format.1.0.3.nupkg.sha512",
+        "auroralib.core.format.nuspec",
+        "icon.png",
+        "lib/net10.0/AuroraLib.Core.Format.dll",
+        "lib/net10.0/AuroraLib.Core.Format.xml",
+        "lib/net8.0/AuroraLib.Core.Format.dll",
+        "lib/net8.0/AuroraLib.Core.Format.xml",
+        "lib/netstandard2.0/AuroraLib.Core.Format.dll",
+        "lib/netstandard2.0/AuroraLib.Core.Format.xml",
+        "lib/netstandard2.1/AuroraLib.Core.Format.dll",
+        "lib/netstandard2.1/AuroraLib.Core.Format.xml"
+      ]
+    },
     "CommandLineParser/2.9.1": {
       "sha512": "OE0sl1/sQ37bjVsPKKtwQlWDgqaxWgtme3xZz7JssWUzg5JpMIyHgCTY9MVMxOg48fJ1AgGT3tgdH5m/kQ5xhA==",
       "type": "package",
@@ -35,10 +152,35 @@
         "lib/netstandard2.0/CommandLine.dll",
         "lib/netstandard2.0/CommandLine.xml"
       ]
+    },
+    "System.Runtime.CompilerServices.Unsafe/6.1.2": {
+      "sha512": "2hBr6zdbIBTDE3EhK7NSVNdX58uTK6iHW/P/Axmm9sl1xoGSLqDvMtpecn226TNwHByFokYwJmt/aQQNlO5CRw==",
+      "type": "package",
+      "path": "system.runtime.compilerservices.unsafe/6.1.2",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "PACKAGE.md",
+        "buildTransitive/net461/System.Runtime.CompilerServices.Unsafe.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net6.0/_._",
+        "buildTransitive/netcoreapp2.0/System.Runtime.CompilerServices.Unsafe.targets",
+        "lib/net462/System.Runtime.CompilerServices.Unsafe.dll",
+        "lib/net462/System.Runtime.CompilerServices.Unsafe.xml",
+        "lib/net6.0/System.Runtime.CompilerServices.Unsafe.dll",
+        "lib/net6.0/System.Runtime.CompilerServices.Unsafe.xml",
+        "lib/net7.0/_._",
+        "lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll",
+        "lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.xml",
+        "system.runtime.compilerservices.unsafe.6.1.2.nupkg.sha512",
+        "system.runtime.compilerservices.unsafe.nuspec"
+      ]
     }
   },
   "projectFileDependencyGroups": {
     "net5.0": [
+      "AuroraLib.Compression >= 2.0.0",
       "CommandLineParser >= 2.9.1"
     ]
   },
@@ -81,6 +223,10 @@
       "net5.0": {
         "targetAlias": "net5.0",
         "dependencies": {
+          "AuroraLib.Compression": {
+            "target": "Package",
+            "version": "[2.0.0, )"
+          },
           "CommandLineParser": {
             "target": "Package",
             "version": "[2.9.1, )"

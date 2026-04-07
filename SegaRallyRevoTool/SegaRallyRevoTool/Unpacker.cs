@@ -12,22 +12,51 @@ namespace SegaRallyRevoTool
     {
         private string _inputPath;
         private string _destPath;
+        private bool _onlyDecompress;
 
-        public Unpacker(string inputPath, string outputPath)
+        public Unpacker(string inputPath, string outputPath, bool onlyDecompress)
         {
             _inputPath = inputPath;
             _destPath = outputPath;
+            _onlyDecompress = onlyDecompress;
         }
 
         public void Unpack()
         {
             Console.WriteLine("Starting to unpack...");
+            Directory.CreateDirectory(_destPath);
 
-            string destDirectoryPath = $@"{ _destPath}\{Path.GetFileNameWithoutExtension(_inputPath)}";
+            string decompedSbfPath = "";
+
+            // Check file is SBF or SBZ1
+            using (FileStream fileStream = new FileStream(_inputPath, FileMode.Open, FileAccess.Read))
+            {
+                byte[] bytes = new byte[4];
+                fileStream.Read(bytes, 0x00, bytes.Length);
+                UInt32 _magic = BitConverter.ToUInt32(bytes);
+                if (SBZ1.magic.Equals(_magic))
+                {
+                    fileStream.Seek(0x00, SeekOrigin.Begin);
+                    SBZ1 sbz1 = new SBZ1();
+                    sbz1.Unpack(fileStream);
+                    decompedSbfPath = $@"{_destPath}\{Path.GetFileNameWithoutExtension(_inputPath)}_decomp.sbf";
+                    using (FileStream sbfFileStream = new FileStream(decompedSbfPath, FileMode.Create, FileAccess.Write))
+                    {
+                        sbz1.Decompress(fileStream, sbfFileStream);
+                    }
+                    _inputPath = decompedSbfPath;
+                }
+            }
+
+            if (_onlyDecompress)
+            {
+                return;
+            }
+
+            string destDirectoryPath = $@"{_destPath}\{Path.GetFileNameWithoutExtension(_inputPath)}";
             Directory.CreateDirectory(destDirectoryPath);
             string metaDataPath = $@"{destDirectoryPath}\_meta";
             Directory.CreateDirectory(metaDataPath);
-
             List<string> destRelativePaths = new List<string>();
 
             // SBF file
@@ -35,7 +64,7 @@ namespace SegaRallyRevoTool
             {
                 sbfFileStream.Seek(0x14, SeekOrigin.Begin);
                 byte[] bytes = new byte[4];
-                sbfFileStream.Read(bytes, 0x00, 4);
+                sbfFileStream.Read(bytes, 0x00, bytes.Length);
                 int length = BitConverter.ToInt32(bytes);
                 if(length < 1)
                 {
@@ -110,6 +139,11 @@ namespace SegaRallyRevoTool
                     }
                 }
 
+            }
+
+            if(decompedSbfPath.Length > 1)
+            {
+                File.Delete(decompedSbfPath);
             }
 
             Console.WriteLine("Done.");
