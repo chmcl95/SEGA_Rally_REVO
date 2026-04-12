@@ -1,8 +1,7 @@
 {
   "profiles": {
     "SegaRallyRevoTool": {
-      "commandName": "Project",
-      "commandLineArgs": "unpack -i \"D:\\Hack\\SEGAPC\\SegaRallyRevo\\format\\archive\\liveries\\_SBF\\livery68_data.sbf\" -o \"D:\\Hack\\SEGAPC\\SegaRallyRevo\\format\\archive\\test\\extracted\""
+      "commandName": "Project"
     }
   }
 }

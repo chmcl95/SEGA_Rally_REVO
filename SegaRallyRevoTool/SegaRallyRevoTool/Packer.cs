@@ -9,11 +9,13 @@ namespace SegaRallyRevoTool
     {
         private string _inputPath;
         private string _destPath;
+        private bool _disableCompress;
 
-        public Packer(string inputPath, string outputPath)
+        public Packer(string inputPath, string outputPath, bool disableCompress)
         {
             _inputPath = inputPath;
             _destPath = outputPath;
+            _disableCompress = disableCompress;
         }
 
         public void Pack()
@@ -32,7 +34,7 @@ namespace SegaRallyRevoTool
                 }
             }
 
-            using (FileStream sbfFileStream = new FileStream($@"{_destPath}\{Path.GetFileName(_inputPath)}.sbf", FileMode.Create, FileAccess.Write))
+            using (MemoryStream sbfFileStream = new MemoryStream())
             {
                 // SBF Header
                 using (FileStream headerFileStream = new FileStream($@"{_inputPath}\_meta\_header.bin", FileMode.Open, FileAccess.Read))
@@ -70,7 +72,6 @@ namespace SegaRallyRevoTool
                         sbfFileStream.Write(bytes);
                     }
 
-                    //TODO: Padding
                 }
 
                 // Entry
@@ -80,6 +81,25 @@ namespace SegaRallyRevoTool
                 foreach(Entry entry in entrys)
                 {
                     entry.Pack(sbfFileStream);
+                }
+
+                if (_disableCompress)
+                {
+                    using (FileStream uncompressedStream = new FileStream($@"{_destPath}\{Path.GetFileName(_inputPath)}.sbf", FileMode.Create, FileAccess.Write)){
+                        uncompressedStream.Write(sbfFileStream.ToArray());
+                    }
+                    Console.WriteLine("Uncompress SBF Generate Done.");
+                    return;
+                }
+
+                using (FileStream sbz1Stream = new FileStream($@"{_destPath}\{Path.GetFileName(_inputPath)}.sbf", FileMode.Create, FileAccess.Write))
+                {
+                    sbfFileStream.Seek(0x0, SeekOrigin.Begin);
+                    sbz1Stream.Seek(0x8, SeekOrigin.Begin);
+                    SBZ1 sbz1 = new SBZ1();
+                    sbz1.Compress(sbfFileStream, sbz1Stream);
+                    sbz1Stream.Seek(0x0, SeekOrigin.Begin);
+                    sbz1.Pack(sbz1Stream);
                 }
             }
 

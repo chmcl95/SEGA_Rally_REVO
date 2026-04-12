@@ -42,6 +42,16 @@ namespace SegaRallyRevoTool
                 Console.WriteLine($"'{options.InputPath}' does not exist.");
                 return;
             }
+            if (!File.Exists($@"{options.InputPath}\\_meta\\_order.txt"))
+            {
+                Console.WriteLine($"'{options.InputPath}\\_meta\\_order.txt' does not exist.");
+                return;
+            }
+            if (!File.Exists($@"{options.InputPath}\\_meta\\_header.bin"))
+            {
+                Console.WriteLine($"'{options.InputPath}\\_meta\\_header.bin' does not exist.");
+                return;
+            }
 
             string outputPath = options.OutputPath;
             if (string.IsNullOrEmpty(options.OutputPath))
@@ -49,7 +59,7 @@ namespace SegaRallyRevoTool
                 outputPath = $"{Path.GetDirectoryName(options.InputPath)}\\packed";
             }
 
-            Packer packer = new Packer(options.InputPath, outputPath);
+            Packer packer = new Packer(options.InputPath, outputPath, options.DisableCompress);
             packer.Pack();
 
             return;
@@ -80,8 +90,8 @@ namespace SegaRallyRevoTool
         [Option('o', "output", Required = false, HelpText = "Output directory for the recreate SBF files.")]
         public string OutputPath { get; set; }
 
-        //[Option("nocomp", Required = false, HelpText = "Disableo compressing SBF files.")]
-        //public string DisableCompress { get; set; }
+        [Option("nocomp", Required = false, HelpText = "Disableo compressing SBF files.")]
+        public bool DisableCompress { get; set; }
 
 
     }

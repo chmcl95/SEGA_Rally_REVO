@@ -39,7 +39,7 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
         public uint unk0x00;
         public uint offset;
 
-        public bool Unpack(FileStream fileStream)
+        public bool Unpack(Stream fileStream)
         {
             byte[] bytes = new byte[4];
             try
@@ -56,7 +56,7 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
             }
         }
 
-        public bool Pack(FileStream fileStream)
+        public bool Pack(Stream fileStream)
         {
             try
             {
@@ -83,7 +83,7 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
         public uint unk0x14;
         public uint unk0x18;
 
-        public bool Unpack(FileStream sbfFileStream, FileStream metaDataFileStream)
+        public bool Unpack(Stream sbfFileStream, Stream metaDataFileStream)
         {
             byte[] bytes = new byte[0x1C];
             try
@@ -114,7 +114,7 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
             }
         }
 
-        public bool Pack(FileStream fileStream)
+        public bool Pack(Stream fileStream)
         {
             try
             {

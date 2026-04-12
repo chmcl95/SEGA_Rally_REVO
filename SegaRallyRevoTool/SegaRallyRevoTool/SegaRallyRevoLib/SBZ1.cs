@@ -7,7 +7,7 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
     class SBZ1
     {
         public const UInt32 magic = 0x315A4253; // SBZ1
-        public Int32 size = 0x00;
+        public Int32 decompressedSize = 0x00;
 
         public bool Unpack(FileStream sbz1FileStream) {
 
@@ -19,7 +19,7 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
                 return true;
             }
 
-            size = BitConverter.ToInt32(bytes, 0x04)-8; // magic + decompress size = 8
+            decompressedSize = BitConverter.ToInt32(bytes, 0x04); // magic + decompress size = 8
 
             return false;
 
@@ -29,17 +29,17 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
         {
             byte[] bytes = BitConverter.GetBytes(magic);
             sbz1FileStream.Write(bytes);
-            bytes = BitConverter.GetBytes(size);
+            bytes = BitConverter.GetBytes(decompressedSize);
             sbz1FileStream.Write(bytes);
 
             return false;
 
         }
 
-        public void Decompress(FileStream sbz1FileStream, FileStream sbfFileStream)
+        public void Decompress(Stream sbz1FileStream, Stream sbfFileStream)
         {
-            byte[] compressed = new byte[sbz1FileStream.Length-8];
-            sbz1FileStream.Read(compressed, 0x00, compressed.Length);
+            byte[] compressed = new byte[decompressedSize];
+            sbz1FileStream.Read(compressed, 0x00, decompressedSize);
 
             using (MemoryStream compressedStream = new MemoryStream(compressed))
             {
@@ -47,28 +47,12 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
             }
         }
 
-        public void Compress(FileStream sbfFileStream, FileStream sbz1FileStream)
+        public void Compress(Stream sbfFileStream, Stream sbz1FileStream)
         {
-
-            using (MemoryStream compressedStream = new MemoryStream())
-            {
-                new ZLib().Compress( , compressedStream);
-            }
-            //ZLib zLib = new ZLib();
-            //byte[] compressed = new byte[zLib.CompressBound((uint)sbfFileStream.Length)];
-            //byte[] decompressed = new byte[size];
-            //sbfFileStream.Read(decompressed, 0, size);
-
-            //ZStream compressStream = new ZStream
-            //{
-            //    Input = decompressed,
-            //    Output = compressed
-            //};
-            //zLib.DeflateInit(ref compressStream, Z_DEFAULT_COMPRESSION);
-            //zLib.Deflate(ref compressStream, Z_DEFAULT_COMPRESSION);
-            //zLib.DeflateEnd(ref compressStream);
-
-            //sbz1FileStream.Write(decompressed);
+            byte[] uncompressed = new byte[sbfFileStream.Length];
+            decompressedSize = (Int32)uncompressed.Length;
+            sbfFileStream.Read(uncompressed, 0x00, (int)sbfFileStream.Length);
+            new ZLib().Compress(uncompressed, sbz1FileStream, AuroraLib.Compression.CompressionSettings.Maximum);
         }
     }
 }
