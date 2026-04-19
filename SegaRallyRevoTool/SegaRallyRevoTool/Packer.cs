@@ -86,6 +86,7 @@ namespace SegaRallyRevoTool
                 if (_disableCompress)
                 {
                     using (FileStream uncompressedStream = new FileStream($@"{_destPath}\{Path.GetFileName(_inputPath)}.sbf", FileMode.Create, FileAccess.Write)){
+                        sbfFileStream.Seek(0x0, SeekOrigin.Begin);
                         uncompressedStream.Write(sbfFileStream.ToArray());
                     }
                     Console.WriteLine("Uncompress SBF Generate Done.");
