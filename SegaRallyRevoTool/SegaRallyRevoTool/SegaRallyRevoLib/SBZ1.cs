@@ -38,12 +38,16 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
 
         public void Decompress(Stream sbz1FileStream, Stream sbfFileStream)
         {
-            byte[] compressed = new byte[decompressedSize];
-            sbz1FileStream.Read(compressed, 0x00, decompressedSize);
+            Int32 compressedSize = (Int32)(sbz1FileStream.Length - sbz1FileStream.Position);
+            byte[] compressed = new byte[compressedSize];
+            sbz1FileStream.Read(compressed, 0x00, compressedSize);
 
             using (MemoryStream compressedStream = new MemoryStream(compressed))
+            using (MemoryStream decompressedStream = new MemoryStream(new byte[decompressedSize]))
             {
-                new ZLib().Decompress(compressedStream, sbfFileStream);
+                new ZLib().Decompress(compressedStream, decompressedStream);
+                decompressedStream.Seek(0x00, SeekOrigin.Begin);
+                decompressedStream.CopyTo(sbfFileStream);
             }
         }
 

@@ -40,7 +40,13 @@ namespace SegaRallyRevoTool
                         fileStream.Seek(0x00, SeekOrigin.Begin);
                         SBZ1 sbz1 = new SBZ1();
                         sbz1.Unpack(fileStream);
+                        // overwrite sbfFileStream as decompressed SBZ1
                         sbz1.Decompress(fileStream, sbfFileStream);
+                    } else
+                    {
+                        fileStream.Seek(0x00, SeekOrigin.Begin);
+                        fileStream.CopyTo(sbfFileStream);
+                        fileStream.Seek(0x00, SeekOrigin.Begin);
                     }
                 }
 
