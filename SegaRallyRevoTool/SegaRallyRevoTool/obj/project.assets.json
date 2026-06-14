@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "targets": {
     "net5.0": {
       "AuroraLib.Compression/2.0.0": {
@@ -9,10 +9,14 @@
           "AuroraLib.Core.Format": "1.0.3"
         },
         "compile": {
-          "lib/netstandard2.1/AuroraLib.Compression.dll": {}
+          "lib/netstandard2.1/AuroraLib.Compression.dll": {
+            "related": ".xml"
+          }
         },
         "runtime": {
-          "lib/netstandard2.1/AuroraLib.Compression.dll": {}
+          "lib/netstandard2.1/AuroraLib.Compression.dll": {
+            "related": ".xml"
+          }
         }
       },
       "AuroraLib.Core/1.7.0": {
@@ -21,37 +25,53 @@
           "System.Runtime.CompilerServices.Unsafe": "6.1.2"
         },
         "compile": {
-          "lib/netstandard2.1/AuroraLib.Core.dll": {}
+          "lib/netstandard2.1/AuroraLib.Core.dll": {
+            "related": ".xml"
+          }
         },
         "runtime": {
-          "lib/netstandard2.1/AuroraLib.Core.dll": {}
+          "lib/netstandard2.1/AuroraLib.Core.dll": {
+            "related": ".xml"
+          }
         }
       },
       "AuroraLib.Core.Format/1.0.3": {
         "type": "package",
         "compile": {
-          "lib/netstandard2.1/AuroraLib.Core.Format.dll": {}
+          "lib/netstandard2.1/AuroraLib.Core.Format.dll": {
+            "related": ".xml"
+          }
         },
         "runtime": {
-          "lib/netstandard2.1/AuroraLib.Core.Format.dll": {}
+          "lib/netstandard2.1/AuroraLib.Core.Format.dll": {
+            "related": ".xml"
+          }
         }
       },
       "CommandLineParser/2.9.1": {
         "type": "package",
         "compile": {
-          "lib/netstandard2.0/CommandLine.dll": {}
+          "lib/netstandard2.0/CommandLine.dll": {
+            "related": ".xml"
+          }
         },
         "runtime": {
-          "lib/netstandard2.0/CommandLine.dll": {}
+          "lib/netstandard2.0/CommandLine.dll": {
+            "related": ".xml"
+          }
         }
       },
       "System.Runtime.CompilerServices.Unsafe/6.1.2": {
         "type": "package",
         "compile": {
-          "lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll": {}
+          "lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll": {
+            "related": ".xml"
+          }
         },
         "runtime": {
-          "lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll": {}
+          "lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll": {
+            "related": ".xml"
+          }
         },
         "build": {
           "buildTransitive/netcoreapp2.0/System.Runtime.CompilerServices.Unsafe.targets": {}
@@ -209,6 +229,7 @@
       },
       "frameworks": {
         "net5.0": {
+          "framework": "net5.0",
           "targetAlias": "net5.0",
           "projectReferences": {}
         }
@@ -217,10 +238,17 @@
         "warnAsError": [
           "NU1605"
         ]
-      }
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "10.0.300"
     },
     "frameworks": {
       "net5.0": {
+        "framework": "net5.0",
         "targetAlias": "net5.0",
         "dependencies": {
           "AuroraLib.Compression": {
@@ -238,7 +266,8 @@
           "net47",
           "net471",
           "net472",
-          "net48"
+          "net48",
+          "net481"
         ],
         "assetTargetFallback": true,
         "warn": true,
@@ -247,7 +276,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\5.0.416\\RuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.301\\RuntimeIdentifierGraph.json"
       }
     }
   }

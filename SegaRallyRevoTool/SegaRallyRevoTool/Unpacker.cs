@@ -13,12 +13,14 @@ namespace SegaRallyRevoTool
         private string _inputPath;
         private string _destPath;
         private bool _onlyDecompress;
+        private bool _isBigEndian;
 
-        public Unpacker(string inputPath, string outputPath, bool onlyDecompress)
+        public Unpacker(string inputPath, string outputPath, bool onlyDecompress, bool isBigEndian)
         {
             _inputPath = inputPath;
             _destPath = outputPath;
             _onlyDecompress = onlyDecompress;
+            _isBigEndian = isBigEndian;
         }
 
         public void Unpack()
@@ -38,7 +40,7 @@ namespace SegaRallyRevoTool
                     if (SBZ1.magic.Equals(_magic))
                     {
                         fileStream.Seek(0x00, SeekOrigin.Begin);
-                        SBZ1 sbz1 = new SBZ1();
+                        SBZ1 sbz1 = new SBZ1(_isBigEndian);
                         sbz1.Unpack(fileStream);
                         // overwrite sbfFileStream as decompressed SBZ1
                         sbz1.Decompress(fileStream, sbfFileStream);
@@ -71,6 +73,10 @@ namespace SegaRallyRevoTool
                 sbfFileStream.Seek(0x14, SeekOrigin.Begin);
                 bytes = new byte[4];
                 sbfFileStream.Read(bytes, 0x00, bytes.Length);
+                if (_isBigEndian)
+                {
+                    Array.Reverse(bytes);
+                }
                 int length = BitConverter.ToInt32(bytes);
                 if(length < 1)
                 {
@@ -81,7 +87,7 @@ namespace SegaRallyRevoTool
                 List<Entry> entrys = new List<Entry>();
                 for (int i = 0; i < length; i++)
                 {
-                    Entry entry = new Entry();
+                    Entry entry = new Entry(_isBigEndian);
                     entry.Unpack(sbfFileStream);
                     entrys.Add(entry);
                 }
@@ -94,7 +100,7 @@ namespace SegaRallyRevoTool
                         endAddress = entrys[i + 1].offset;
                     }
 
-                    Container container = new Container();
+                    Container container = new Container(_isBigEndian);
                     sbfFileStream.Seek(entrys[i].offset, SeekOrigin.Begin);
                     using (FileStream metaDataFileStream = new FileStream($@"{metaDataPath}\{i:D8}.HEAD", FileMode.Create, FileAccess.Write))
                     {
@@ -132,6 +138,14 @@ namespace SegaRallyRevoTool
                 bytes = new byte[entrys[0].offset];
                 sbfFileStream.Seek(0x00, SeekOrigin.Begin);
                 sbfFileStream.Read(bytes, 0x00, bytes.Length);
+                // Reversing for PS3 ver
+                if (_isBigEndian)
+                {
+                    for (int i = 0; i < bytes.Length; i += 4)
+                    {
+                        Array.Reverse(bytes, i, 4);
+                    }
+                }
                 using (FileStream sbfHeader = new FileStream($@"{metaDataPath}\_header.bin", FileMode.Create, FileAccess.Write))
                 {
                     sbfHeader.Write(bytes);

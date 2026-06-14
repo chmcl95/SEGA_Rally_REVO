@@ -8,18 +8,29 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
     {
         public const UInt32 magic = 0x315A4253; // SBZ1
         public Int32 decompressedSize = 0x00;
+        bool _isBigEndian;
+
+        public SBZ1(bool isBigEndian)
+        {
+            _isBigEndian = isBigEndian;
+        }
 
         public bool Unpack(FileStream sbz1FileStream) {
 
-            byte[] bytes = new byte[0x8];
-            sbz1FileStream.Read(bytes, 0x00, 0x8);
+            byte[] bytes = new byte[0x4];
+            sbz1FileStream.Read(bytes, 0x00, 0x4);
 
             UInt32 _magic = BitConverter.ToUInt32(bytes, 0x00);
-            if (!magic.Equals(_magic)){
+            if (!magic.Equals(_magic)) {
                 return true;
             }
 
-            decompressedSize = BitConverter.ToInt32(bytes, 0x04); // magic + decompress size = 8
+            bytes = new byte[0x4];
+            sbz1FileStream.Read(bytes, 0x00, 0x4);
+            if (_isBigEndian) {
+                Array.Reverse(bytes);
+            }
+            decompressedSize = BitConverter.ToInt32(bytes, 0x00); // magic + decompress size = 8
 
             return false;
 
@@ -30,6 +41,10 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
             byte[] bytes = BitConverter.GetBytes(magic);
             sbz1FileStream.Write(bytes);
             bytes = BitConverter.GetBytes(decompressedSize);
+            if (_isBigEndian)
+            {
+                Array.Reverse(bytes);
+            }
             sbz1FileStream.Write(bytes);
 
             return false;

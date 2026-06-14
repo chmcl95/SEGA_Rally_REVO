@@ -17,17 +17,18 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
                     uint entryLength = BitConverter.ToUInt32(bytes, 0x00);
                     for (int i = 0; i < entryLength; i++) 
                     {
-                        Entry entry = new Entry();
-                        if (entry.Unpack(fileStream)) 
+                        Entry entry = new Entry(false);
+                        if (!entry.Unpack(fileStream)) 
                         {
-                            return true;
+                            return false;
                         }
                         entries.Add(entry);
                     }
                 }
-                return false;
-            } catch {
                 return true;
+            } catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"SBF Unpack error: {ex.Message}");
+                return false;
             }
         }
 
@@ -38,21 +39,42 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
     {
         public uint unk0x00;
         public uint offset;
+        bool _isBigEndian;
+
+        public Entry(bool isBigEndian)
+        {
+            _isBigEndian = isBigEndian;
+        }
 
         public bool Unpack(Stream fileStream)
         {
             byte[] bytes = new byte[4];
             try
             {
-                fileStream.Read(bytes, 0x00, 4);
-                unk0x00 = BitConverter.ToUInt32(bytes, 0x00);
-                fileStream.Read(bytes, 0x00, 4);
-                offset = BitConverter.ToUInt32(bytes, 0x00);
-                return false;
-            }
-            catch
-            {
+                // Reversing for PS3 ver
+                if (_isBigEndian)
+                {
+                    fileStream.Read(bytes, 0x00, 4);
+                    Array.Reverse(bytes);
+                    unk0x00 = BitConverter.ToUInt32(bytes, 0x00);
+                    fileStream.Read(bytes, 0x00, 4);
+                    Array.Reverse(bytes);
+                    offset = BitConverter.ToUInt32(bytes, 0x00);
+                }
+                // PC ver
+                else
+                {
+                    fileStream.Read(bytes, 0x00, 4);
+                    unk0x00 = BitConverter.ToUInt32(bytes, 0x00);
+                    fileStream.Read(bytes, 0x00, 4);
+                    offset = BitConverter.ToUInt32(bytes, 0x00);
+                }
                 return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Entry Unpack error: {ex.Message}");
+                return false;
             }
         }
 
@@ -60,10 +82,25 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
         {
             try
             {
-                byte[] bytes = BitConverter.GetBytes(unk0x00);
-                fileStream.Write(bytes);
-                bytes = BitConverter.GetBytes(offset);
-                fileStream.Write(bytes);
+                byte[] bytes = new Byte[4];
+                // Reversing for PS3 ver
+                if (_isBigEndian)
+                {
+                    bytes = BitConverter.GetBytes(unk0x00);
+                    Array.Reverse(bytes);
+                    fileStream.Write(bytes);
+                    bytes = BitConverter.GetBytes(offset);
+                    Array.Reverse(bytes);
+                    fileStream.Write(bytes);
+                }
+                // PC ver
+                else
+                {
+                    bytes = BitConverter.GetBytes(unk0x00);
+                    fileStream.Write(bytes);
+                    bytes = BitConverter.GetBytes(offset);
+                    fileStream.Write(bytes);
+                }
                 return false;
             }
             catch
@@ -83,13 +120,30 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
         public uint unk0x14;
         public uint unk0x18;
 
+        bool _isBigEndian;
+
+        public Container(bool isBigEndian)
+        {
+            _isBigEndian = isBigEndian;
+        }
+
         public bool Unpack(Stream sbfFileStream, Stream metaDataFileStream)
         {
             byte[] bytes = new byte[0x1C];
             try
             {
                 sbfFileStream.Read(bytes, 0x00, 0x1C);
-                metaDataFileStream.Write(bytes);
+
+                // Reversing for PS3 ver
+                if (_isBigEndian)
+                {
+                    for (int i = 0; i < bytes.Length; i += 4)
+                    {
+                        Array.Reverse(bytes, i, 4);
+                    }
+                }
+
+                metaDataFileStream.Write(bytes, 0, bytes.Length);
 
                 type = BitConverter.ToInt32(bytes, 0x00);
                 unk0x04 = BitConverter.ToUInt32(bytes, 0x04);
@@ -99,18 +153,28 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
                 unk0x14 = BitConverter.ToUInt32(bytes, 0x14);
                 unk0x18 = BitConverter.ToUInt32(bytes, 0x18);
 
-                if(type == 4)
+                if (type == 4)
                 {
                     bytes = new byte[0x28];
                     sbfFileStream.Read(bytes, 0x00, bytes.Length);
-                    metaDataFileStream.Write(bytes);
+
+                    if (_isBigEndian)
+                    {
+                        for (int i = 0; i < bytes.Length; i += 4)
+                        {
+                            Array.Reverse(bytes, i, 4);
+                        }
+                    }
+
+                    metaDataFileStream.Write(bytes, 0, bytes.Length);
                 }
 
-                return false;
-            }
-            catch
-            {
                 return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Container Unpack error: {ex.Message}");
+                return false;
             }
         }
 

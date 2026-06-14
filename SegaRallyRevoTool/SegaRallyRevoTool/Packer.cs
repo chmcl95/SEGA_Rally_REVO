@@ -10,12 +10,14 @@ namespace SegaRallyRevoTool
         private string _inputPath;
         private string _destPath;
         private bool _disableCompress;
+        private bool _isBigEndian;
 
-        public Packer(string inputPath, string outputPath, bool disableCompress)
+        public Packer(string inputPath, string outputPath, bool disableCompress, bool isBigEndian)
         {
             _inputPath = inputPath;
             _destPath = outputPath;
             _disableCompress = disableCompress;
+            _isBigEndian = isBigEndian;
         }
 
         public void Pack()
@@ -50,7 +52,7 @@ namespace SegaRallyRevoTool
                     // ContainerHeader
                     using (FileStream containerHeaderFileStream = new FileStream($@"{_inputPath}\_meta\{i:D8}.HEAD", FileMode.Open, FileAccess.Read))
                     {
-                        Entry entry = new Entry();
+                        Entry entry = new Entry(_isBigEndian);
                         entry.offset = (UInt32)sbfFileStream.Position;
                         containerHeaderFileStream.Seek(0x04, SeekOrigin.Begin);
                         bytes = new byte[4];
@@ -97,7 +99,7 @@ namespace SegaRallyRevoTool
                 {
                     sbfFileStream.Seek(0x0, SeekOrigin.Begin);
                     sbz1Stream.Seek(0x8, SeekOrigin.Begin);
-                    SBZ1 sbz1 = new SBZ1();
+                    SBZ1 sbz1 = new SBZ1(_isBigEndian);
                     sbz1.Compress(sbfFileStream, sbz1Stream);
                     sbz1Stream.Seek(0x0, SeekOrigin.Begin);
                     sbz1.Pack(sbz1Stream);

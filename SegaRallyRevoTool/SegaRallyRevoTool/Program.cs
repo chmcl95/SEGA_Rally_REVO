@@ -29,7 +29,7 @@ namespace SegaRallyRevoTool
                 outputPath = $"{Path.GetDirectoryName(options.InputPath)}\\extracted";
             }
 
-            Unpacker unpacker = new Unpacker(options.InputPath, outputPath, options.OnlyDecompress);
+            Unpacker unpacker = new Unpacker(options.InputPath, outputPath, options.OnlyDecompress, options.IsBigEndian);
             unpacker.Unpack();
 
             return;
@@ -59,7 +59,7 @@ namespace SegaRallyRevoTool
                 outputPath = $"{Path.GetDirectoryName(options.InputPath)}\\packed";
             }
 
-            Packer packer = new Packer(options.InputPath, outputPath, options.DisableCompress);
+            Packer packer = new Packer(options.InputPath, outputPath, options.DisableCompress, options.IsBigEndian);
             packer.Pack();
 
             return;
@@ -79,6 +79,9 @@ namespace SegaRallyRevoTool
         [Option("decomp", Required = false, HelpText = "Only decompressing SBF files.")]
         public bool OnlyDecompress { get; set; }
 
+        [Option("ps3", Required = false, HelpText = "Targets file as vdf (PS3)")]
+        public bool IsBigEndian { get; set; }
+
     }
 
     [Verb("pack", HelpText = "Pack SBF file .Files are generat in \"packed\" folder.(Deafult)")]
@@ -93,6 +96,8 @@ namespace SegaRallyRevoTool
         [Option("nocomp", Required = false, HelpText = "Disableo compressing SBF files.")]
         public bool DisableCompress { get; set; }
 
+        [Option("ps3", Required = false, HelpText = "Targets file as PS3")]
+        public bool IsBigEndian { get; set; }
 
     }
 }
