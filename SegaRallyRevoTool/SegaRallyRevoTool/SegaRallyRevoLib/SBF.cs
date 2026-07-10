@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -31,7 +31,6 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
                 return false;
             }
         }
-
     }
 
 
@@ -127,7 +126,11 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
             _isBigEndian = isBigEndian;
         }
 
-        public bool Unpack(Stream sbfFileStream, Stream metaDataFileStream)
+        /// <summary>
+        /// ContainerHeader(0x1C) を sbfFileStream から読み headFileStream へ書く。
+        /// type==4 の場合は ExtraHeader(0x28) も sbfFileStream から読み extraFileStream へ書く。
+        /// </summary>
+        public bool Unpack(Stream sbfFileStream, Stream headFileStream, Stream extraFileStream)
         {
             byte[] bytes = new byte[0x1C];
             try
@@ -143,11 +146,11 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
                     }
                 }
 
-                metaDataFileStream.Write(bytes, 0, bytes.Length);
+                headFileStream.Write(bytes, 0, bytes.Length);
 
-                type = BitConverter.ToInt32(bytes, 0x00);
+                type    = BitConverter.ToInt32(bytes,  0x00);
                 unk0x04 = BitConverter.ToUInt32(bytes, 0x04);
-                unk0x08 = BitConverter.ToInt32(bytes, 0x08);
+                unk0x08 = BitConverter.ToInt32(bytes,  0x08);
                 unk0x0C = BitConverter.ToUInt32(bytes, 0x0C);
                 unk0x10 = BitConverter.ToUInt32(bytes, 0x10);
                 unk0x14 = BitConverter.ToUInt32(bytes, 0x14);
@@ -166,7 +169,8 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
                         }
                     }
 
-                    metaDataFileStream.Write(bytes, 0, bytes.Length);
+                    // ExtraHeader は別ストリームへ
+                    extraFileStream.Write(bytes, 0, bytes.Length);
                 }
 
                 return true;
@@ -178,21 +182,51 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
             }
         }
 
-        public bool Pack(Stream fileStream)
+        /// <summary>
+        /// ContainerHeader(0x1C) を sbfFileStream へ書く。
+        /// type==4 の場合は続けて ExtraHeader(0x28) も書く。
+        /// </summary>
+        public bool Pack(Stream sbfFileStream, Stream headFileStream, Stream extraFileStream)
         {
             try
             {
-                //byte[] bytes = BitConverter.GetBytes(type);
-                //fileStream.Write(bytes);
-                //bytes = BitConverter.GetBytes(unk0x04);
-                //fileStream.Write(bytes);
-                //bytes = BitConverter.GetBytes(size);
-                //fileStream.Write(bytes);
-                return false;
-            }
-            catch
-            {
+                byte[] bytes = new byte[0x1C];
+                headFileStream.Read(bytes, 0x00, bytes.Length);
+
+                if (_isBigEndian)
+                {
+                    for (int i = 0; i < bytes.Length; i += 4)
+                    {
+                        Array.Reverse(bytes, i, 4);
+                    }
+                }
+
+                sbfFileStream.Write(bytes, 0, bytes.Length);
+
+                type = BitConverter.ToInt32(bytes, 0x00);
+
+                if (type == 4)
+                {
+                    bytes = new byte[0x28];
+                    extraFileStream.Read(bytes, 0x00, bytes.Length);
+
+                    if (_isBigEndian)
+                    {
+                        for (int i = 0; i < bytes.Length; i += 4)
+                        {
+                            Array.Reverse(bytes, i, 4);
+                        }
+                    }
+
+                    sbfFileStream.Write(bytes, 0, bytes.Length);
+                }
+
                 return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Container Pack error: {ex.Message}");
+                return false;
             }
         }
     }

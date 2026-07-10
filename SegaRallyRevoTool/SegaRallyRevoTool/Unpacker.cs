@@ -1,4 +1,4 @@
-﻿using SegaRallyRevoTool.SegaRallyRevoLib;
+using SegaRallyRevoTool.SegaRallyRevoLib;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -95,17 +95,31 @@ namespace SegaRallyRevoTool
                 for (int i = 0; i < length; i++)
                 {
                     long endAddress = sbfFileStream.Length;
-                    if (i < length-1)
+                    if (i < length - 1)
                     {
                         endAddress = entrys[i + 1].offset;
                     }
 
                     Container container = new Container(_isBigEndian);
                     sbfFileStream.Seek(entrys[i].offset, SeekOrigin.Begin);
-                    using (FileStream metaDataFileStream = new FileStream($@"{metaDataPath}\{i:D8}.HEAD", FileMode.Create, FileAccess.Write))
-                    {
 
-                        container.Unpack(sbfFileStream, metaDataFileStream);
+                    string headPath  = $@"{metaDataPath}\{i:D8}.HEAD";
+                    string extraPath = $@"{metaDataPath}\{i:D8}.EXTRA";
+
+                    using (FileStream headFileStream = new FileStream(headPath, FileMode.Create, FileAccess.Write))
+                    using (MemoryStream extraMemStream = new MemoryStream())
+                    {
+                        container.Unpack(sbfFileStream, headFileStream, extraMemStream);
+
+                        // type==4 のときだけ .EXTRA を出力
+                        if (container.type == 4)
+                        {
+                            using (FileStream extraFileStream = new FileStream(extraPath, FileMode.Create, FileAccess.Write))
+                            {
+                                extraMemStream.Seek(0, SeekOrigin.Begin);
+                                extraMemStream.CopyTo(extraFileStream);
+                            }
+                        }
                     }
 
                     long size = endAddress - sbfFileStream.Position;
@@ -118,11 +132,11 @@ namespace SegaRallyRevoTool
                     sbfFileStream.Read(bytes, 0x00, bytes.Length);
                     string extension = "BIN";
                     // detection DDS
-                    if (bytes[0]==0x44 && bytes[1] == 0x44 && bytes[2] == 0x53 && bytes[3] == 0x20)
+                    if (bytes[0] == 0x44 && bytes[1] == 0x44 && bytes[2] == 0x53 && bytes[3] == 0x20)
                     {
                         extension = "DDS";
                     }
-                    if(!Directory.Exists($@"{destDirectoryPath}\{container.type}"))
+                    if (!Directory.Exists($@"{destDirectoryPath}\{container.type}"))
                     {
                         Directory.CreateDirectory($@"{destDirectoryPath}\{container.type}");
                     }
@@ -150,7 +164,7 @@ namespace SegaRallyRevoTool
                 {
                     sbfHeader.Write(bytes);
                 }
-                // Order of Conatiner
+                // Order of Container
                 using (StreamWriter orderTextWriter = File.CreateText($@"{metaDataPath}\_order.txt"))
                 {
                     foreach (string _path in destRelativePaths)
