@@ -193,6 +193,9 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
                 byte[] bytes = new byte[0x1C];
                 headFileStream.Read(bytes, 0x00, bytes.Length);
 
+                // .HEAD は常に LE 保存なので、BE 変換前に type を読む
+                type = BitConverter.ToInt32(bytes, 0x00);
+
                 if (_isBigEndian)
                 {
                     for (int i = 0; i < bytes.Length; i += 4)
@@ -202,8 +205,6 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
                 }
 
                 sbfFileStream.Write(bytes, 0, bytes.Length);
-
-                type = BitConverter.ToInt32(bytes, 0x00);
 
                 if (type == 4)
                 {

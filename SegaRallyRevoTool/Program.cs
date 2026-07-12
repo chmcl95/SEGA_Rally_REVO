@@ -79,7 +79,7 @@ namespace SegaRallyRevoTool
         [Option("decomp", Required = false, HelpText = "Only decompressing SBF files.")]
         public bool OnlyDecompress { get; set; }
 
-        [Option("ps3", Required = false, HelpText = "Targets file as vdf (PS3)")]
+        [Option("ps3", Required = false, HelpText = "Targets file as vbf (PS3)")]
         public bool IsBigEndian { get; set; }
 
     }
@@ -96,7 +96,7 @@ namespace SegaRallyRevoTool
         [Option("nocomp", Required = false, HelpText = "Disableo compressing SBF files.")]
         public bool DisableCompress { get; set; }
 
-        [Option("ps3", Required = false, HelpText = "Targets file as PS3")]
+        [Option("ps3", Required = false, HelpText = "Targets file as vbf (PS3)")]
         public bool IsBigEndian { get; set; }
 
     }
