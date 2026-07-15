@@ -1,5 +1,26 @@
-SegaRallyRevoTool/.vs/
-SegaRallyRevoTool/SegaRallyRevoTool/obj/
+# Build outputs
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docview
+
+# Rider
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test data (バイナリサンプルはリポジトリに含めない)
+*.sbf
+*.sbz
+*.vbf
+*.dds
+
 sample/
-SegaRallyRevoTool/SegaRallyRevoTool/bin/
 old/
