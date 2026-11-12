@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace SegaRallyRevoTool.SegaRallyRevoLib
 {
@@ -20,6 +21,13 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
 
         /// <summary>ペイロード開始位置のアラインメント単位 (4096 bytes)。</summary>
         public const int AlignSize = 0x1000;
+
+        /// <summary>
+        /// ContainerHeader +0x08 (size) とペイロード長の差分。
+        ///     size = ミップ全段の合計バイト数 + 0xAC
+        /// (PC/PS3 のサンプル全 358 テクスチャで成立を確認)
+        /// </summary>
+        public const int SizeFieldOverhead = 0xAC;
 
         // dword 反転済みの DDS マジック (" SDD" というバイト列 = 20 53 44 44)
         private static readonly byte[] ReversedMagic = { 0x20, 0x53, 0x44, 0x44 };
@@ -46,30 +54,39 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
         }
 
         /// <summary>
-        /// 生スライス内から dword 反転された BE DDS ヘッダーの開始オフセットを探す。
-        /// 反転マジック(20 53 44 44) を検索し、反転後に "DDS " + dwSize==124 になることで
-        /// 誤検出を防ぐ。見つからない場合は -1 を返す。
+        /// バッファ内にある dword 反転された BE DDS ヘッダーの開始オフセットを
+        /// すべて出現順に返す。反転マジック(20 53 44 44) を検索し、反転後に
+        /// "DDS " + dwSize==124 になることで誤検出を防ぐ。
+        ///
+        /// テクスチャの物理位置は論理スライス境界とは一致しない (スライス k が
+        /// テクスチャ k のヘッダーを含むとは限らない) ため、対応付けは
+        /// 「データ領域全体を通した出現順」で行う必要がある。
         /// </summary>
-        public static int FindHeaderOffset(byte[] slice)
+        public static List<int> FindAllHeaderOffsets(byte[] buffer)
         {
+            List<int> result = new List<int>();
             int searchFrom = 0;
+
             while (true)
             {
-                int idx = IndexOf(slice, ReversedMagic, searchFrom);
+                int idx = IndexOf(buffer, ReversedMagic, searchFrom);
                 if (idx < 0)
                 {
-                    return -1;
+                    return result;
                 }
 
-                if (idx + DdsHeaderSize <= slice.Length)
+                if (idx + DdsHeaderSize <= buffer.Length)
                 {
-                    byte[] candidate = DwordReverse(slice, idx, DdsHeaderSize);
+                    byte[] candidate = DwordReverse(buffer, idx, DdsHeaderSize);
                     uint dwSize = BitConverter.ToUInt32(candidate, 4);
                     bool magicOk = candidate[0] == (byte)'D' && candidate[1] == (byte)'D' &&
                                    candidate[2] == (byte)'S' && candidate[3] == (byte)' ';
                     if (magicOk && dwSize == 124)
                     {
-                        return idx;
+                        result.Add(idx);
+                        // ヘッダー内部を再検索しても意味が無いので次のヘッダー以降へ進む
+                        searchFrom = idx + DdsHeaderSize;
+                        continue;
                     }
                 }
 

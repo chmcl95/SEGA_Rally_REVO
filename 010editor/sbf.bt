@@ -1,65 +1,117 @@
 //------------------------------------------------
 //--- 010 Editor v16.0.3 Binary Template
 //
-//      File: 
-//   Authors: 
-//   Version: 
-//   Purpose: 
-//  Category: 
-// File Mask: 
-//  ID Bytes: 
-//   History: 
+//      File: SEGA Rally Revo SBF / VBF archive (PC / PS3)
+//   Purpose: Parse the relocatable block structure described in
+//            Document/SBF_format.md (re_analyze, 2026-11-12)
+//  Category: Archive
+// File Mask: *.sbf;*.vbf
+//   History: 2026-11-12 rewritten for the reloc/import block model.
+//
+// NOTE: Apply to a DECOMPRESSED file (no "SBZ1" magic). Use
+//       `SegaRallyRevoTool unpack --decomp` or tools/sbf_inspect.py first.
+//       Byte order is detected automatically (PC = LE, PS3 = BE).
 //------------------------------------------------
-typedef struct Entry{
-    int unk0x00;
-    int adr; // same to Container.unk0x04?
-};
 
-typedef struct DDSDscriptor {
-    uint unk0x00;
+if (ReadUInt(0) == 3 || ReadUInt(0) == 4)
+    LittleEndian();
+else
+    BigEndian();
+
+typedef struct {
+    uint version;        // 3 or 4 (v3: padding not zero-filled, EOF = roundUp(end, 0x800))
+    uint vbfContinued;   // VBF: 1 = a following split part (.N.vbf) exists
+    uint vbfMainSize <format=hex>;  // VBF: length of the main-memory part (0x1000 + 0x44*n), SBF: 0
+    uint zero0C;
+    uint zero10;
+    uint count;
+} GlobalHeader;
+
+typedef struct {
+    uint nameHash <format=hex>;
+    uint offset <format=hex>;
+} Entry;
+
+typedef struct {
+    uint texKind;        // 1 = 2D, 2 = Cube
+    uint dataPtr <format=hex>;  // PC: 0, VBF: physical DDS header = dataPtr + 0x1018 + 0x44*k
     uint width;
     uint height;
-    uint unk0x0C;
-    uint unk0x10;
-    uint unk0x14;
-    uint unk0x18;
-    uint unk0x1C;
-    uint unk0x20;
-    uint unk0x24;
-};
+    uint unk10;
+    uint addressU;       // 1 = wrap, 3 = clamp (PS3 may use 0x2901 = GL_REPEAT)
+    uint addressV;
+    uint addressW;
+    uint filterType;     // 2 = linear, 3 = anisotropic
+    float lodBias;
+    uint maxAniso;
+} TexDesc;
 
-typedef struct Container {
-    local int HeaderAdr = FTell();
-    uint type;
-    uint unk0x04; // hash? file name hash?
-    uint size; 
-    uint unk0x0C;
-    uint unk0x10;
-    uint unk0x14;
-    uint unk0x18;
-    switch(type){
-        case 4:
-            // DDS description. Addtionaly Data.
-            DDSDscriptor ddsDscriptor;
-            byte blob[size-0x44];
-            break;
-        case 5:
-            byte blob[size];
-            break;
-        default:
-            Printf("Detect Unknown Type: %d address:0x%08x\r\n", type, FTell());
-            byte blob[size];
+typedef struct {
+    uint nameOffset <format=hex>;   // from data start
+    uint valueOffset <format=hex>;  // from data start
+} Symbol;
+
+typedef struct (int isVbf) {
+    uint type;           // 1 Model 2 Material 3 Shader 4 Texture 5 DataTable 6 Particle
+                         // 7 RawFile 11 SceneGraph 12 TypedObject 13 TextureList
+    uint nameHash <format=hex>;
+    uint size <format=hex>;
+    uint sub <format=hex>;   // type 5: symbol table offset (= size) or 0, type 12: class hash
+    uint nReloc;
+    if (nReloc > 0)
+        uint relocOffset[nReloc] <format=hex>;   // pointer fields (value = data-relative, 0xFFFFFFFF = NULL)
+    uint nImport;
+    if (nImport > 0)
+        uint importOffset[nImport] <format=hex>; // hash-reference fields
+    if (type == 4) {
+        TexDesc desc;
+        if (!isVbf)
+            ubyte dds[size - 0x2C];              // "DDS " + 0x7C header + mips
+    } else if (size > 0) {
+        ubyte data[size];
     }
-};
+    if (type == 5 && !isVbf) {
+        uint symZero;
+        uint nSymbol;
+        if (nSymbol > 0)
+            Symbol symbols[nSymbol];
+    }
+} Block <read=BlockRead>;
 
-// ----
-LittleEndian();
-FSeek(0x14);
-int length;
-Entry entrys[length];
+string BlockRead(Block &b) {
+    string s;
+    SPrintf(s, "type %d  hash %08X  size %X", b.type, b.nameHash, b.size);
+    return s;
+}
 
-local int i = 0;
-for(i = 0; i < length; i++) {
-    FSeek(entrys[i].adr);
-    Container container;
+typedef struct (uint payloadLen) {
+    ubyte ddsHeaderDwordSwapped[0x80];   // reverse each dword to get a normal DDS header
+    ubyte payload[payloadLen];
+} VbfTexture;
+
+// ---- main ----
+GlobalHeader header;
+local int isVbf = (header.vbfMainSize != 0);
+local uint n = header.count;
+if (n > 0)
+    Entry entries[n];
+
+local uint i;
+local uint dataPtr[n + 1];
+local uint blockSize[n + 1];
+for (i = 0; i < n; i++) {
+    FSeek(entries[i].offset);
+    Block block(isVbf);
+    // remember values for the VBF pass (avoid block[i] when only one block exists)
+    if (isVbf) {
+        dataPtr[i] = ReadUInt(entries[i].offset + 0x1C);
+        blockSize[i] = ReadUInt(entries[i].offset + 0x08);
+    }
+}
+
+if (isVbf) {
+    for (i = 0; i < n; i++) {
+        FSeek(dataPtr[i] + 0x1018 + 0x44 * i);
+        VbfTexture texture(blockSize[i] - 0xAC);
+    }
 }

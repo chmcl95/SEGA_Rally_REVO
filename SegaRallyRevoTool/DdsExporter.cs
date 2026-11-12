@@ -9,16 +9,25 @@ namespace SegaRallyRevoTool
     /// unpack --ps3 で得られた "4/{i}.BIN" 生スライスから、通常のツールで開ける
     /// 標準 DDS ファイル (dds/{i}.DDS) を抽出する。
     ///
-    /// PS3 (VBF) の物理レイアウトでは、テクスチャ i の「本当のペイロード全長」
-    /// (PC 版 DDS のペイロードと同一のもの) は、コンテナ i 自身の生スライスの
-    /// 末尾までで収まりきらず、コンテナ i+1 の生スライスの先頭側 (次ヘッダーの
-    /// 手前にある「未知領域」) にまで物理的にはみ出して格納されている。
-    /// このはみ出し量は ExtraHeader+0x00 の論理オフセット差分から
-    /// (payloadFullLen = extra[i+1] - extra[i] - 0x80) として厳密に計算できるため、
-    /// 本クラスはコンテナ i と i+1 の両方の生スライスを跨いでペイロードを
-    /// 再構成する。最終テクスチャだけは「次」が無いため、スライス内に
-    /// 物理的に存在する分だけを取り出す (PC 版よりわずかに短く切り詰められている
-    /// ことがある)。
+    /// PS3 (VBF) のデータ領域の物理レイアウトは次のとおり (サンプル全 37 アーカイブ /
+    /// 183 テクスチャで検証済み):
+    ///
+    ///   [先頭パディング 0x1018]
+    ///   [BE DDS ヘッダー 0x80]   ← 直後のペイロード開始位置が 0x1000 アラインになる位置
+    ///   [ペイロード]              ← 長さ = ContainerHeader +0x08 (size) - 0xAC
+    ///   [0x44 バイトの gap]       ← 意味未解明 (実測では常にゼロ)
+    ///   [アラインメント埋め]      ← 実測では常にゼロ
+    ///   [BE DDS ヘッダー 0x80] ...
+    ///   最終テクスチャはペイロード直後が EOF (gap もパディングも無い)
+    ///
+    /// 一方 ExtraHeader +0x00 が示す「論理オフセット」は、この物理レイアウトから
+    /// テクスチャあたり 0x44 バイトずつ差し引いた別の区切り方であり、Unpacker は
+    /// その論理境界で生スライスを分割している。したがって
+    /// **「論理スライス k がテクスチャ k のヘッダーを含む」とは限らない**
+    /// (小さいテクスチャが含まれると 1 つずつずれる)。
+    ///
+    /// そのため本クラスは生スライスを index 順に連結してデータ領域の物理バイト列を
+    /// 復元し、その中の BE DDS ヘッダーを出現順に type4 コンテナへ対応付ける。
     /// </summary>
     class DdsExporter
     {
@@ -43,83 +52,81 @@ namespace SegaRallyRevoTool
             string type4Dir = Path.Combine(_inputPath, "4");
             string metaDir = Path.Combine(_inputPath, "_meta");
             string ddsDir = Path.Combine(_inputPath, "dds");
-            Directory.CreateDirectory(ddsDir);
 
-            // 各コンテナの ExtraHeader+0x00 (論理オフセット) と生スライスを読み込む
-            Dictionary<int, uint> extras = new Dictionary<int, uint>();
-            Dictionary<int, byte[]> slices = new Dictionary<int, byte[]>();
-            foreach (int idx in indices)
+            // 生スライスを index 順に連結すると、データ領域 (絶対オフセット
+            // ExtraHeader[0]+0x00 以降) の物理バイト列そのものになる。
+            byte[] data = ConcatSlices(type4Dir, indices);
+
+            List<int> headerOffsets = Ps3DdsUtil.FindAllHeaderOffsets(data);
+            if (headerOffsets.Count != indices.Count)
             {
-                string extraPath = Path.Combine(metaDir, $"{idx:D8}.EXTRA");
-                byte[] extraBytes = File.ReadAllBytes(extraPath);
-                extras[idx] = BitConverter.ToUInt32(extraBytes, 0x00);
-                slices[idx] = File.ReadAllBytes(FindDataFile(type4Dir, idx));
+                Console.WriteLine($"  BE DDS header count ({headerOffsets.Count}) does not match " +
+                                  $"type4 container count ({indices.Count}). Aborting export " +
+                                  "(exporting with a wrong texture mapping would corrupt the archive).");
+                return;
             }
 
-            int exportedCount = 0;
+            Directory.CreateDirectory(ddsDir);
+
             for (int k = 0; k < indices.Count; k++)
             {
                 int idx = indices[k];
-                byte[] slice = slices[idx];
+                long payloadLen = ReadContainerSize(metaDir, idx) - Ps3DdsUtil.SizeFieldOverhead;
+                int payloadStart = headerOffsets[k] + Ps3DdsUtil.DdsHeaderSize;
 
-                int headerOffset = Ps3DdsUtil.FindHeaderOffset(slice);
-                if (headerOffset < 0)
+                if (payloadLen < 0 || payloadStart + payloadLen > data.Length)
                 {
-                    Console.WriteLine($"  [{idx:D8}] BE DDS header not found in raw slice. Skipped.");
-                    continue;
+                    Console.WriteLine($"  [{idx:D8}] Declared payload size (0x{payloadLen:X}) does not fit " +
+                                      "in the archive data. Aborting export.");
+                    return;
                 }
 
-                byte[] leHeader = Ps3DdsUtil.DwordReverse(slice, headerOffset, Ps3DdsUtil.DdsHeaderSize);
-                int ownPayloadStart = headerOffset + Ps3DdsUtil.DdsHeaderSize;
-                int ownPayloadLen = slice.Length - ownPayloadStart;
-                if (ownPayloadLen < 0)
-                {
-                    ownPayloadLen = 0;
-                }
+                byte[] leHeader = Ps3DdsUtil.DwordReverse(data, headerOffsets[k], Ps3DdsUtil.DdsHeaderSize);
 
-                byte[] payload;
-                if (k < indices.Count - 1)
+                // ヘッダーから算出した長さと size フィールドの食い違いは想定外なので警告する
+                DdsHeader info = DdsHeader.Parse(leHeader);
+                if (info != null && info.ComputePayloadSize() != payloadLen)
                 {
-                    int nextIdx = indices[k + 1];
-                    long payloadFullLen = (long)extras[nextIdx] - extras[idx] - Ps3DdsUtil.DdsHeaderSize;
-                    long needed = payloadFullLen - ownPayloadLen;
-
-                    if (needed > 0)
-                    {
-                        byte[] nextSlice = slices[nextIdx];
-                        // 安全側ガード: 次スライスより多くを要求されたら取れる分だけにする
-                        needed = Math.Min(needed, nextSlice.Length);
-                        payload = new byte[ownPayloadLen + needed];
-                        Array.Copy(slice, ownPayloadStart, payload, 0, ownPayloadLen);
-                        Array.Copy(nextSlice, 0, payload, ownPayloadLen, needed);
-                    }
-                    else
-                    {
-                        long truncatedLen = Math.Max(0, payloadFullLen);
-                        truncatedLen = Math.Min(truncatedLen, ownPayloadLen);
-                        payload = new byte[truncatedLen];
-                        Array.Copy(slice, ownPayloadStart, payload, 0, (int)truncatedLen);
-                    }
-                }
-                else
-                {
-                    // 最終テクスチャ: 次コンテナが無いのでスライス内にある分だけを取り出す。
-                    // PC 版ペイロードよりわずかに短く切り詰められている場合がある。
-                    payload = new byte[ownPayloadLen];
-                    Array.Copy(slice, ownPayloadStart, payload, 0, ownPayloadLen);
+                    Console.WriteLine($"  [{idx:D8}] Warning: size field implies 0x{payloadLen:X} bytes " +
+                                      $"but the DDS header implies 0x{info.ComputePayloadSize():X}. " +
+                                      "Using the size field.");
                 }
 
                 string ddsPath = Path.Combine(ddsDir, $"{idx:D8}.DDS");
                 using (FileStream fs = new FileStream(ddsPath, FileMode.Create, FileAccess.Write))
                 {
                     fs.Write(leHeader, 0, leHeader.Length);
-                    fs.Write(payload, 0, payload.Length);
+                    fs.Write(data, payloadStart, (int)payloadLen);
                 }
-                exportedCount++;
-                Console.WriteLine($"  [{idx:D8}] -> dds/{idx:D8}.DDS ({leHeader.Length + payload.Length} bytes)");
+
+                Console.WriteLine($"  [{idx:D8}] -> dds/{idx:D8}.DDS " +
+                                  $"({Ps3DdsUtil.DdsHeaderSize + payloadLen} bytes)");
             }
 
-            Console.WriteLine($"Done. Exported {exportedCount}/{indices.Count} DDS file(s).");
+            Console.WriteLine($"Done. Exported {indices.Count}/{indices.Count} DDS file(s).");
+        }
+
+        /// <summary>
+        /// type4 コンテナの生スライスを index 昇順 (= ファイル内のデータ並び順) に連結する。
+        /// </summary>
+        internal static byte[] ConcatSlices(string type4Dir, List<int> indices)
+        {
+            using (MemoryStream ms = new MemoryStream())
+            {
+                foreach (int idx in indices)
+                {
+                    byte[] slice = File.ReadAllBytes(FindDataFile(type4Dir, idx));
+                    ms.Write(slice, 0, slice.Length);
+                }
+                return ms.ToArray();
+            }
+        }
+
+        /// <summary>_meta\{idx}.HEAD の +0x08 (ContainerHeader の size。常に LE 保存)。</summary>
+        internal static long ReadContainerSize(string metaDir, int idx)
+        {
+            byte[] head = File.ReadAllBytes(Path.Combine(metaDir, $"{idx:D8}.HEAD"));
+            return BitConverter.ToUInt32(head, 0x08);
         }
 
         /// <summary>
