@@ -458,136 +458,258 @@ namespace SegaRallyRevoTool
         }
 
         // =====================================================================
-        // VBF (PS3 のテクスチャ専用アーカイブ)。ヘッダー群を先頭に連続させ、DDS を後ろに並べる。
+        // VBF (PS3 のテクスチャ専用アーカイブ)。配置は Document/SBF_format.md §6.4.2 に従う。
         // =====================================================================
 
-        private byte[] BuildVbf(byte[] headerBinLe, int containerCount, Dictionary<int, string> dataFileByIndex, string preDataPath)
+        /// <summary>
+        /// VBF を組み立てる。
+        ///
+        /// <code>
+        /// 0x0000  グローバルヘッダー + エントリー (_header.bin。元のパディングを含む)
+        /// B + 0x44k  テクスチャ k のブロックヘッダー + 記述子 (B = _header.bin の長さ = 0x1000)
+        /// mainEnd = B + 0x44n (グローバル +0x08)
+        /// H_0 = roundUp(mainEnd, 0x1000) + 0x1000 - 0x80
+        /// H_k: DDS ヘッダー (dword 反転) 0x80 + ペイロード (H_k + 0x80 は 0x1000 境界) + ゼロ 0x44
+        /// H_{k+1} = roundUp(H_k + 0x80 + payloadLen_k + 0x44 + 0x80, 0x1000) - 0x80
+        /// EOF = 最終ペイロードの終端
+        /// 記述子 +0x04 = H_k - 0x1018 - 0x44k
+        /// </code>
+        ///
+        /// アンパック結果の _predata.bin + 4/*.BIN を連結すると、元ファイルの mainEnd 以降の
+        /// 物理バイト列になる (スライス境界は旧ツールの解釈による論理オフセットで、意味は無い)。
+        /// そこから各テクスチャの DDS ヘッダー + ペイロード (長さは .HEAD の size - 0xAC) を取り出し、
+        /// 上の規則で並べ直す。位置が元と変わらない区間は元のパディングバイトをそのまま使うので、
+        /// 無改造なら元ファイルとバイト一致する。位置がずれた後のパディングはゼロで埋める。
+        /// </summary>
+        private byte[] BuildVbf(byte[] headerBinLe, int count, Dictionary<int, string> dataFileByIndex, string preDataPath)
         {
-            byte[] bytes;
-
-            // Container 番号 → .EXTRA の有無 (type==4 かどうか)
-            List<bool> hasExtraByIndex = new List<bool>(containerCount);
-            for (int i = 0; i < containerCount; i++)
+            const bool be = true;
+            string metaDir = Path.Combine(_inputPath, "_meta");
+            uint headerCount = BitConverter.ToUInt32(headerBinLe, 0x14);
+            if (headerCount != count)
             {
-                hasExtraByIndex.Add(File.Exists($@"{_inputPath}\_meta\{i:D8}.EXTRA"));
+                throw new SbfFormatException($"_meta has {count} .HEAD file(s) but _header.bin declares {headerCount} block(s). " +
+                                             "Adding or removing textures is not supported.");
+            }
+            long tableEnd = SbfLayout.GlobalHeaderSize + (long)SbfLayout.EntrySize * count;
+            if (headerBinLe.Length < tableEnd)
+            {
+                throw new SbfFormatException($"_meta\\_header.bin ({headerBinLe.Length} bytes) is shorter than the entry table (0x{tableEnd:X} bytes).");
+            }
+            if (headerBinLe.Length % 4 != 0)
+            {
+                throw new SbfFormatException($"_meta\\_header.bin ({headerBinLe.Length} bytes) is not a multiple of 4 bytes.");
             }
 
-            // type4 かつデータファイルを持つ Container 番号 (昇順 = ファイル内でのデータ並び順)
-            List<int> ps3Type4DataIndices = new List<int>();
-            // Container 番号 → 再計算した ExtraHeader+0x00 (DDS絶対オフセット)
-            Dictionary<int, uint> ps3ComputedDataOffset = new Dictionary<int, uint>();
-
-            for (int i = 0; i < containerCount; i++)
+            long blocksStart = headerBinLe.Length;
+            if (blocksStart != SbfLayout.RoundUp(tableEnd, SbfLayout.FirstBlockAlign))
             {
-                if (hasExtraByIndex[i] && dataFileByIndex.ContainsKey(i))
+                Console.WriteLine($"Note: the first texture header is at 0x{blocksStart:X} " +
+                                  $"(retail VBFs use 0x{SbfLayout.RoundUp(tableEnd, SbfLayout.FirstBlockAlign):X}).");
+            }
+            long mainEnd = blocksStart + (long)SbfLayout.VbfBlockLength * count;
+
+            // ---- ブロックヘッダー + 記述子 (0x44) を読む (.HEAD 0x1C + .EXTRA 0x28、LE 化して保存されている) ----
+            byte[][] metas = new byte[count][];
+            long[] payloadLens = new long[count];
+            for (int k = 0; k < count; k++)
+            {
+                string headPath = Path.Combine(metaDir, $"{k:D8}.HEAD");
+                string extraPath = Path.Combine(metaDir, $"{k:D8}.EXTRA");
+                byte[] head = File.ReadAllBytes(headPath);
+                byte[] extra = File.Exists(extraPath) ? File.ReadAllBytes(extraPath) : new byte[0];
+                if (head.Length + extra.Length != SbfLayout.VbfBlockLength)
                 {
-                    ps3Type4DataIndices.Add(i);
+                    throw new SbfFormatException($"block {k:D8}: .HEAD + .EXTRA is 0x{head.Length + extra.Length:X} bytes; " +
+                                                 $"a VBF texture header must be 0x{SbfLayout.VbfBlockLength:X} bytes.");
                 }
-            }
+                byte[] m = new byte[SbfLayout.VbfBlockLength];
+                Array.Copy(head, 0, m, 0, head.Length);
+                Array.Copy(extra, 0, m, head.Length, extra.Length);
 
-            long headerBinLength = headerBinLe.Length;
-            long containerHeadersTotalSize = 0;
-            for (int i = 0; i < containerCount; i++)
-            {
-                containerHeadersTotalSize += 0x1C + (hasExtraByIndex[i] ? 0x28 : 0);
-            }
-            long preDataSize = new FileInfo(preDataPath).Length;
-
-            // ヘッダー連続部 + _predata (未知領域) の直後から type4 データが並ぶ
-            long runningOffset = headerBinLength + containerHeadersTotalSize + preDataSize;
-            foreach (int idx in ps3Type4DataIndices)
-            {
-                long blobLength = new FileInfo($@"{_inputPath}\{dataFileByIndex[idx]}").Length;
-                ps3ComputedDataOffset[idx] = (uint)runningOffset;
-                runningOffset += blobLength;
-            }
-
-            using (MemoryStream sbfFileStream = new MemoryStream())
-            {
-                // SBF Header (_header.bin はアンパック時に LE 化されている)
-                bytes = (byte[])headerBinLe.Clone();
-                if (_isBigEndian)
+                uint type = BitConverter.ToUInt32(m, 0x00);
+                uint size = BitConverter.ToUInt32(m, 0x08);
+                uint nReloc = BitConverter.ToUInt32(m, 0x10);
+                uint nImport = BitConverter.ToUInt32(m, 0x14);
+                if (type != 4 || nReloc != 0 || nImport != 0)
                 {
-                    Ps3DdsUtil.DwordReverseInPlace(bytes, 0, bytes.Length & ~3);
+                    throw new SbfFormatException($"block {k:D8}: type {type}, nReloc {nReloc}, nImport {nImport}; " +
+                                                 "a VBF may only contain textures (type 4 with no reloc / import).");
                 }
-                sbfFileStream.Write(bytes);
-
-                List<Entry> entrys = new List<Entry>();
-                for (int i = 0; i < containerCount; i++)
+                if (size < Ps3DdsUtil.SizeFieldOverhead)
                 {
-                    string headPath  = $@"{_inputPath}\_meta\{i:D8}.HEAD";
-                    string extraPath = $@"{_inputPath}\_meta\{i:D8}.EXTRA";
+                    throw new SbfFormatException($"block {k:D8}: size 0x{size:X} is smaller than the descriptor + DDS header (0xAC).");
+                }
+                metas[k] = m;
+                payloadLens[k] = size - Ps3DdsUtil.SizeFieldOverhead;
+            }
 
-                    using (FileStream headFileStream = new FileStream(headPath, FileMode.Open, FileAccess.Read))
+            // ---- 元の物理バイト列 (mainEnd 以降) を復元する ----
+            byte[] region;
+            using (MemoryStream concat = new MemoryStream())
+            {
+                byte[] pre = File.ReadAllBytes(preDataPath);
+                concat.Write(pre, 0, pre.Length);
+                for (int k = 0; k < count; k++)
+                {
+                    if (!dataFileByIndex.TryGetValue(k, out string relativePath))
                     {
-                        // Entry のオフセットと unk0x00(=unk0x04 in Container) を記録
-                        Entry entry = new Entry(_isBigEndian);
-                        entry.offset = (UInt32)sbfFileStream.Position;
+                        throw new SbfFormatException($"block {k:D8}: no data file is listed in _meta\\_order.txt.");
+                    }
+                    byte[] slice = File.ReadAllBytes(Path.Combine(_inputPath, relativePath));
+                    concat.Write(slice, 0, slice.Length);
+                }
+                region = concat.ToArray();
+            }
 
-                        // unk0x00 は HEAD の +0x04 に格納されている
-                        headFileStream.Seek(0x04, SeekOrigin.Begin);
-                        bytes = new byte[4];
-                        headFileStream.Read(bytes, 0x00, bytes.Length);
-                        entry.unk0x00 = BitConverter.ToUInt32(bytes);
-                        entrys.Add(entry);
+            long[] oldHeaders = LocateVbfTextures(region, mainEnd, payloadLens);
 
-                        headFileStream.Seek(0x00, SeekOrigin.Begin);
+            // ---- 規則どおりに並べ直す ----
+            long[] newHeaders = new long[count];
+            newHeaders[0] = SbfLayout.VbfFirstHeaderPosition(mainEnd);
+            for (int k = 1; k < count; k++)
+            {
+                newHeaders[k] = SbfLayout.VbfNextHeaderPosition(newHeaders[k - 1], payloadLens[k - 1]);
+            }
+            long eof = newHeaders[count - 1] + Ps3DdsUtil.DdsHeaderSize + payloadLens[count - 1];
+            if (eof > int.MaxValue)
+            {
+                throw new SbfFormatException($"the archive would be 0x{eof:X} bytes, which is too large.");
+            }
 
-                        // .EXTRA が存在すれば type==4 → ExtraHeader も一緒に書く
-                        if (hasExtraByIndex[i])
-                        {
-                            byte[] extraBytes = File.ReadAllBytes(extraPath);
+            byte[] output = new byte[eof];
+            Array.Copy(headerBinLe, output, headerBinLe.Length);
+            Ps3DdsUtil.DwordReverseInPlace(output, 0, headerBinLe.Length);
+            SbfLayout.WriteU32(output, 0x08, (uint)mainEnd, be);
+            SbfLayout.WriteU32(output, 0x14, (uint)count, be);
 
-                            // ExtraHeader+0x00 (DDS絶対オフセット) を実際のレイアウトに合わせて
-                            // 逆算した値で上書きする (.EXTRA は常に LE 保存)
-                            if (ps3ComputedDataOffset.TryGetValue(i, out uint newDataOffset))
-                            {
-                                byte[] ptrBytes = BitConverter.GetBytes(newDataOffset);
-                                Array.Copy(ptrBytes, 0, extraBytes, 0, 4);
-                            }
+            int changedPointers = 0;
+            for (int k = 0; k < count; k++)
+            {
+                byte[] m = metas[k];
+                uint oldPointer = BitConverter.ToUInt32(m, 0x1C);
+                uint newPointer = SbfLayout.VbfDataPointer(newHeaders[k], k);
+                if (oldPointer != newPointer)
+                {
+                    changedPointers++;
+                    Console.WriteLine($"  [{k:D8}] data pointer 0x{oldPointer:X} -> 0x{newPointer:X}");
+                }
+                byte[] beMeta = (byte[])m.Clone();
+                Array.Copy(BitConverter.GetBytes(newPointer), 0, beMeta, 0x1C, 4);
+                Ps3DdsUtil.DwordReverseInPlace(beMeta, 0, beMeta.Length);
 
-                            using (MemoryStream extraMemStream = new MemoryStream(extraBytes))
-                            {
-                                Container container = new Container(_isBigEndian);
-                                container.Pack(sbfFileStream, headFileStream, extraMemStream);
-                            }
-                        }
-                        else
-                        {
-                            // type==4 以外: HEAD(0x1C) のみ書く
-                            using (MemoryStream emptyExtra = new MemoryStream())
-                            {
-                                Container container = new Container(_isBigEndian);
-                                container.Pack(sbfFileStream, headFileStream, emptyExtra);
-                            }
-                        }
+                long blockPos = blocksStart + (long)SbfLayout.VbfBlockLength * k;
+                Array.Copy(beMeta, 0, output, blockPos, beMeta.Length);
+                SbfLayout.WriteU32(output, SbfLayout.GlobalHeaderSize + SbfLayout.EntrySize * k, BitConverter.ToUInt32(m, 0x04), be);
+                SbfLayout.WriteU32(output, SbfLayout.GlobalHeaderSize + SbfLayout.EntrySize * k + 4, (uint)blockPos, be);
+            }
+
+            // mainEnd 〜 H_0 のパディング (H_0 は テクスチャ数だけで決まる)
+            if (oldHeaders[0] == newHeaders[0])
+            {
+                Array.Copy(region, 0, output, mainEnd, newHeaders[0] - mainEnd);
+            }
+
+            int moved = 0;
+            for (int k = 0; k < count; k++)
+            {
+                long textureLength = Ps3DdsUtil.DdsHeaderSize + payloadLens[k];
+                Array.Copy(region, oldHeaders[k] - mainEnd, output, newHeaders[k], textureLength);
+                if (oldHeaders[k] != newHeaders[k])
+                {
+                    moved++;
+                }
+
+                long oldEnd = oldHeaders[k] + textureLength;
+                long nextOld = k + 1 < count ? oldHeaders[k + 1] : mainEnd + region.Length;
+                if (k + 1 < count)
+                {
+                    // ペイロード後のゼロ 0x44 + 次の 0x1000 境界までの埋め。位置が元どおりなら元のバイトを使う
+                    if (oldHeaders[k] == newHeaders[k] && nextOld == newHeaders[k + 1])
+                    {
+                        Array.Copy(region, oldEnd - mainEnd, output, oldEnd, nextOld - oldEnd);
+                    }
+                    else
+                    {
+                        WarnIfNonZero(region, oldEnd - mainEnd, Math.Max(oldEnd, nextOld) - mainEnd, k,
+                                      "between this texture and the next one");
                     }
                 }
-
-                // ヘッダー連続部の直後に _predata (未知領域) → type4 データを並び順どおりに書き出す
-                bytes = File.ReadAllBytes(preDataPath);
-                sbfFileStream.Write(bytes);
-
-                foreach (int idx in ps3Type4DataIndices)
+                else
                 {
-                    bytes = File.ReadAllBytes($@"{_inputPath}\{dataFileByIndex[idx]}");
-                    sbfFileStream.Write(bytes);
+                    WarnIfNonZero(region, oldEnd - mainEnd, region.Length, k, "after the last texture");
                 }
+            }
 
-                // Entry テーブルを書き込む
-                sbfFileStream.Seek(0x14, SeekOrigin.Begin);
-                bytes = BitConverter.GetBytes((UInt32)containerCount);
-                if (_isBigEndian)
-                {
-                    Array.Reverse(bytes);
-                }
-                sbfFileStream.Write(bytes);
-                foreach (Entry entry in entrys)
-                {
-                    entry.Pack(sbfFileStream);
-                }
+            if (moved > 0 || changedPointers > 0)
+            {
+                Console.WriteLine($"Layout recomputed: {moved} of {count} texture(s) moved, " +
+                                  $"{changedPointers} data pointer(s) changed, EOF at 0x{eof:X}.");
+            }
+            return output;
+        }
 
-                return sbfFileStream.ToArray();
+        /// <summary>
+        /// mainEnd 以降の物理バイト列 region から、各テクスチャの DDS ヘッダー位置 (ファイル先頭基準) を求める。
+        /// まず §6.4.2 の規則どおりの位置にあるかを調べ (製品版と DdsImporter の出力はこれに当たる)、
+        /// 違えば dword 反転 DDS マジックを出現順に探す。
+        /// </summary>
+        private static long[] LocateVbfTextures(byte[] region, long mainEnd, long[] payloadLens)
+        {
+            int n = payloadLens.Length;
+            long[] positions = new long[n];
+            bool ruleOk = true;
+            long h = SbfLayout.VbfFirstHeaderPosition(mainEnd);
+            for (int k = 0; k < n && ruleOk; k++)
+            {
+                positions[k] = h;
+                ruleOk = IsVbfTextureAt(region, h - mainEnd, payloadLens[k]);
+                h = SbfLayout.VbfNextHeaderPosition(h, payloadLens[k]);
+            }
+            if (ruleOk)
+            {
+                return positions;
+            }
+
+            List<int> found = Ps3DdsUtil.FindAllHeaderOffsets(region);
+            if (found.Count != n)
+            {
+                throw new SbfFormatException($"found {found.Count} DDS header(s) in the texture data but the archive has {n} texture(s).");
+            }
+            for (int k = 0; k < n; k++)
+            {
+                positions[k] = mainEnd + found[k];
+                if (!IsVbfTextureAt(region, found[k], payloadLens[k]) ||
+                    (k + 1 < n && found[k] + Ps3DdsUtil.DdsHeaderSize + payloadLens[k] > found[k + 1]))
+                {
+                    throw new SbfFormatException($"block {k:D8}: the texture data at 0x{positions[k]:X} does not fit its size " +
+                                                 $"(payload 0x{payloadLens[k]:X} bytes).");
+                }
+            }
+            Console.WriteLine("Note: the texture data was not laid out by the standard VBF rules; " +
+                              "it was located by searching for DDS headers.");
+            return positions;
+        }
+
+        private static bool IsVbfTextureAt(byte[] region, long pos, long payloadLength)
+        {
+            if (pos < 0 || pos + Ps3DdsUtil.DdsHeaderSize + payloadLength > region.Length)
+            {
+                return false;
+            }
+            return region[pos] == 0x20 && region[pos + 1] == 0x53 && region[pos + 2] == 0x44 && region[pos + 3] == 0x44
+                   && SbfLayout.ReadU32(region, pos + 4, true) == 124;
+        }
+
+        private static void WarnIfNonZero(byte[] buffer, long from, long to, int k, string where)
+        {
+            for (long i = Math.Max(0, from); i < Math.Min(to, buffer.Length); i++)
+            {
+                if (buffer[i] != 0)
+                {
+                    Console.WriteLine($"  [{k:D8}] Warning: dropped 0x{to - from:X} byte(s) (not all zero) {where}.");
+                    return;
+                }
             }
         }
     }

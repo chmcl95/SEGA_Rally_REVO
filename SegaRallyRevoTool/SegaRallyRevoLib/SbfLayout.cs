@@ -229,6 +229,34 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
         {
             return version >= 4 ? RoundUp(lastEnd, 4) + V4EofPadding : RoundUp(lastEnd, V3EofAlign);
         }
+
+        // ---- VBF (PS3 のテクスチャ専用アーカイブ, §6.4.2) ----
+
+        /// <summary>VBF の先頭に並ぶ 1 テクスチャぶんのブロックヘッダー (0x18) + 記述子 (0x2C)。</summary>
+        public const int VbfBlockLength = 0x18 + TextureDescriptorSize;
+        /// <summary>記述子 +0x04 (データポインタ) = H_k - VbfPointerBias - 0x44 × k。</summary>
+        public const int VbfPointerBias = 0x1018;
+        /// <summary>DDS ペイロードの後ろに置かれるゼロ領域 (先頭へ移したヘッダー + 記述子の空き席)。</summary>
+        public const int VbfGapSize = VbfBlockLength;
+
+        /// <summary>§6.4.2: 最初の DDS ヘッダーの位置 H_0 (= roundUp(+0x08, 0x1000) + 0x1000 - 0x80)。</summary>
+        public static long VbfFirstHeaderPosition(long mainEnd)
+        {
+            return RoundUp(mainEnd, TexturePayloadAlign) + TexturePayloadAlign - Ps3DdsUtil.DdsHeaderSize;
+        }
+
+        /// <summary>§6.4.2: H_{k+1} = roundUp(H_k + 0x80 + payloadLen_k + 0x44 + 0x80, 0x1000) - 0x80。</summary>
+        public static long VbfNextHeaderPosition(long header, long payloadLength)
+        {
+            return RoundUp(header + Ps3DdsUtil.DdsHeaderSize + payloadLength + VbfGapSize + Ps3DdsUtil.DdsHeaderSize,
+                           TexturePayloadAlign) - Ps3DdsUtil.DdsHeaderSize;
+        }
+
+        /// <summary>§6.4.2: テクスチャ k の記述子 +0x04 に入れるデータポインタ。</summary>
+        public static uint VbfDataPointer(long header, int k)
+        {
+            return (uint)(header - VbfPointerBias - (long)VbfBlockLength * k);
+        }
     }
 
     /// <summary>

@@ -77,7 +77,7 @@ DX10 拡張ヘッダーなど size を計算できない形式は、寸法が変
 
 ### PC (SBF) パック時の配置 (2026-11-12 実装、Document/SBF_format.md §8)
 
-PS3 の `.sbf` (type 4 を含まない BE の SBF) も同じ処理を通る。VBF は従来どおり (後述)。
+PS3 の `.sbf` (type 4 を含まない BE の SBF) も同じ処理を通る。VBF は別処理 (「PS3 (VBF) の type4 分割アンパック / Pack 時の配置」を参照)。
 
 1. `.HEAD` + `.EXTRA` + データファイルを連結してブロックのバイト列を復元し、
    `type, hash, size, sub, nReloc, reloc[], nImport, import[], data, (type 5 のトレーラ)` を解析して
@@ -307,7 +307,7 @@ DDS 抽出/書き戻し (`dds/` フォルダ) は**生スライスを index 順�
 `.EXTRA` ファイルが存在するかどうかで type==4 か否かを判別する。
 Packer は `.EXTRA` の有無を `File.Exists()` で確認して挙動を切り替える。
 
-### PS3 (VBF) の type4 分割アンパック / Pack 時のオフセット逆算
+### PS3 (VBF) の type4 分割アンパック / Pack 時の配置
 
 PC (SBF) と異なり PS3 (VBF) は ContainerHeader/ExtraHeader が全コンテナ分連続しているため、
 Unpacker は type4 コンテナについて ExtraHeader+0x00 (DDS絶対オフセット, .EXTRA 内では常に LE 保存)
@@ -320,17 +320,31 @@ Unpacker は type4 コンテナについて ExtraHeader+0x00 (DDS絶対オフセ
   従来どおり Entry オフセットベースで最後の Container に残りデータを丸ごと割り当てる
   raw 方式にフォールバックする (`_predata.bin` は出力されない)
 
-Packer 側 (`ps3SplitMode` = `_isBigEndian` かつ `_meta\_predata.bin` が存在する場合) は:
+Packer 側 (`BuildVbf`、`_isBigEndian` かつ `_meta\_predata.bin` が存在する場合。2026-11-12 に
+Document/SBF_format.md §6.4.2 の規則で書き直し) は:
 
-1. 全 `.HEAD`/`.EXTRA` の有無からヘッダー連続部の合計サイズを求める
-2. `_header.bin` の長さ + ヘッダー連続部サイズ + `_predata.bin` の長さ を起点に、
-   `_order.txt` (`dataFileByIndex`) から得た type4 データファイルのサイズを順に積算して
-   各コンテナの絶対オフセットを再計算する
-3. `.EXTRA` の先頭 4 バイト (LE) をこの再計算値で上書きしてから ContainerHeader/ExtraHeader を書き込み
-4. ヘッダーを全コンテナ分書き終えた後に `_predata.bin` → 各 type4 データファイルを順に書き込む
+1. `.HEAD` + `.EXTRA` (計 0x44) を読み、type 4 かつ nReloc = nImport = 0 であることを確かめる。
+   ペイロード長 = size - 0xAC
+2. `_predata.bin` + `4/*.BIN` を連結して元ファイルの mainEnd 以降の物理バイト列を復元する
+   (スライス境界は論理オフセットなので意味は無い)。各テクスチャの DDS ヘッダー位置 H_k は
+   規則どおりの位置にあればそれを使い、無ければ dword 反転マジック `" SDD"` を出現順に探す
+3. 規則どおりに並べ直す:
+   - ブロックヘッダー + 記述子を `_header.bin` の直後 (0x1000) から 0x44 ずつ並べ、
+     グローバル +0x08 = mainEnd = 0x1000 + 0x44n
+   - `H_0 = roundUp(mainEnd, 0x1000) + 0x1000 - 0x80`、
+     `H_{k+1} = roundUp(H_k + 0x80 + payloadLen_k + 0x44 + 0x80, 0x1000) - 0x80`、
+     EOF = 最終ペイロードの終端
+   - 記述子 +0x04 (データポインタ) = `H_k - 0x1018 - 0x44k` を毎回計算し直す
+4. 位置が元と変わらない区間のパディング (ペイロード後のゼロ 0x44 + 0x1000 境界までの埋め) は
+   元のバイトをそのまま使う。ずれた区間はゼロで埋める
 
-この設計により、テクスチャサイズを変更するような改造 (mod) を行っても、後続コンテナの
-ExtraHeader オフセットは Pack 時に自動的に再計算される。
+- 検証: 製品版 PS3 の VBF 816 本で unpack → pack --nocomp が 815 本バイト一致。
+  残り 1 本は壊れた mod の `livery55_data.vbf` で、テクスチャ 1 のデータポインタが
+  `0xACAA0` → `0xACF24` に直り、`tools/sbf_inspect.py --validate` を通る
+  (`dds/` を消して DdsImporter を通さない場合も同じ出力になる)
+- テクスチャ間で DDS を入れ替えて全テクスチャのサイズを変えた場合 (5 / 8 / 2 枚の VBF) も、
+  出力は `--validate` を通り、再アンパックした DDS は入れ替え後の内容と一致した
+- テクスチャの追加・削除はできない (`_header.bin` のブロック数と `.HEAD` の数が違えばエラー)
 
 ---
 
