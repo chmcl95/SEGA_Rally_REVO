@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using SegaRallyRevoTool.SegaRallyRevoLib;
 using System;
 using System.IO;
 
@@ -32,10 +33,18 @@ namespace SegaRallyRevoTool
             }
 
             Unpacker unpacker = new Unpacker(options.InputPath, outputPath, options.OnlyDecompress, options.IsBigEndian);
-            unpacker.Unpack();
+            try
+            {
+                unpacker.Unpack();
+            }
+            catch (SbfFormatException ex)
+            {
+                Fail($"cannot unpack '{options.InputPath}': {ex.Message}");
+                return;
+            }
 
-            // PS3 (--ps3) の場合はアンパック後に標準 DDS を dds/ へ自動抽出する
-            if (options.IsBigEndian && !options.OnlyDecompress)
+            // PS3 (ビッグエンディアンと自動判定された場合) はアンパック後に標準 DDS を dds/ へ自動抽出する
+            if (unpacker.IsBigEndian && !options.OnlyDecompress)
             {
                 string destDirectoryPath = $@"{outputPath}\{Path.GetFileNameWithoutExtension(options.InputPath)}";
                 if (Directory.Exists(destDirectoryPath))
@@ -72,21 +81,43 @@ namespace SegaRallyRevoTool
                 outputPath = $"{Path.GetDirectoryName(options.InputPath)}\\packed";
             }
 
-            // PS3 (--ps3) の場合は dds/ の内容を 4/ の生スライスへ自動で書き戻してからパックする
-            if (options.IsBigEndian && Directory.Exists($@"{options.InputPath}\dds"))
+            bool guessed = false;
+            bool isBigEndian = false;
+            try
             {
-                DdsImporter importer = new DdsImporter(options.InputPath);
-                if (!importer.Import())
+                // エンディアンは unpack が書いた _meta\_endian.txt から決める (無ければ --ps3)
+                isBigEndian = Packer.ResolveBigEndian(options.InputPath, options.IsBigEndian, out guessed);
+
+                // PS3 の場合は dds/ の内容を 4/ の生スライスへ自動で書き戻してからパックする
+                if (isBigEndian && Directory.Exists($@"{options.InputPath}\dds"))
                 {
-                    Console.WriteLine("DDS import failed. Aborting pack.");
-                    return;
+                    DdsImporter importer = new DdsImporter(options.InputPath);
+                    if (!importer.Import())
+                    {
+                        Fail("DDS import failed. Aborting pack.");
+                        return;
+                    }
                 }
+
+                Packer packer = new Packer(options.InputPath, outputPath, options.DisableCompress, isBigEndian);
+                packer.Pack();
+            }
+            catch (SbfFormatException ex)
+            {
+                string hint = guessed
+                    ? $" (_meta\\{EndianMarker.FileName} is missing, so {(isBigEndian ? "big" : "little")}-endian was assumed; " +
+                      (isBigEndian ? "this may be a PC archive." : "if this is a PS3 archive, pass --ps3.") + ")"
+                    : "";
+                Fail($"cannot pack '{options.InputPath}': {ex.Message}{hint}");
             }
 
-            Packer packer = new Packer(options.InputPath, outputPath, options.DisableCompress, options.IsBigEndian);
-            packer.Pack();
-
             return;
+        }
+
+        private static void Fail(string message)
+        {
+            Console.WriteLine($"Error: {message}");
+            Environment.ExitCode = 1;
         }
 
         public static void ExportDds(ExportDdsVerbs options)
@@ -131,12 +162,12 @@ namespace SegaRallyRevoTool
         [Option("decomp", Required = false, HelpText = "Only decompressing SBF files.")]
         public bool OnlyDecompress { get; set; }
 
-        [Option("ps3", Required = false, HelpText = "Targets file as vbf (PS3)")]
+        [Option("ps3", Required = false, HelpText = "Optional. The byte order (PC little-endian / PS3 big-endian) is detected automatically; this flag is only checked against the detection.")]
         public bool IsBigEndian { get; set; }
 
     }
 
-    [Verb("pack", HelpText = "Pack SBF file .Files are generat in \"packed\" folder.(Deafult)")]
+    [Verb("pack",HelpText = "Pack SBF file .Files are generat in \"packed\" folder.(Deafult)")]
     public class PackVerbs
     {
         [Option('i', "input", Required = true, HelpText = "Input Directry. Need unocked SBF files.")]
@@ -148,7 +179,7 @@ namespace SegaRallyRevoTool
         [Option("nocomp", Required = false, HelpText = "Disableo compressing SBF files.")]
         public bool DisableCompress { get; set; }
 
-        [Option("ps3", Required = false, HelpText = "Targets file as vbf (PS3)")]
+        [Option("ps3", Required = false, HelpText = "Only needed for directories unpacked by an older version (without _meta\\_endian.txt): treat the archive as PS3 (big-endian).")]
         public bool IsBigEndian { get; set; }
 
     }
