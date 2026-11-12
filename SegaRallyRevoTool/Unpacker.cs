@@ -13,76 +13,79 @@ namespace SegaRallyRevoTool
         private string _inputPath;
         private string _destPath;
         private bool _onlyDecompress;
+        private bool _ps3Requested;
         private bool _isBigEndian;
 
-        public Unpacker(string inputPath, string outputPath, bool onlyDecompress, bool isBigEndian)
+        /// <summary>アンパックしたアーカイブのエンディアン (Unpack() 後に有効。自動判定の結果)。</summary>
+        public bool IsBigEndian => _isBigEndian;
+
+        /// <param name="ps3Requested">
+        /// --ps3 が指定されたか。エンディアンはファイル内容から自動判定するので参考情報としてのみ使い、
+        /// 判定結果と食い違えば警告を出す。
+        /// </param>
+        public Unpacker(string inputPath, string outputPath, bool onlyDecompress, bool ps3Requested)
         {
             _inputPath = inputPath;
             _destPath = outputPath;
             _onlyDecompress = onlyDecompress;
-            _isBigEndian = isBigEndian;
+            _ps3Requested = ps3Requested;
         }
 
+        /// <exception cref="SbfFormatException">入力が SBF/VBF/SBZ1 として解釈できない場合</exception>
         public void Unpack()
         {
             Console.WriteLine("Starting to unpack...");
-            Directory.CreateDirectory(_destPath);
 
-            // Check file is SBF or SBZ1
-            using (MemoryStream sbfFileStream = new MemoryStream())
+            // SBZ1 (zlib 外殻) なら展開する。+0x04 のサイズはプラットフォームのエンディアンなので、
+            // エンディアン判定後に照合する。
+            byte[] fileBytes = File.ReadAllBytes(_inputPath);
+            byte[] sbfBytes = fileBytes;
+            bool compressed = fileBytes.Length >= 4 && BitConverter.ToUInt32(fileBytes, 0) == SBZ1.magic;
+            uint sizeFieldLe = 0, sizeFieldBe = 0;
+            if (compressed)
             {
-                byte[] bytes = new byte[4];
-                using (FileStream fileStream = new FileStream(_inputPath, FileMode.Open, FileAccess.Read))
-                {
-                    bytes = new byte[4];
-                    fileStream.Read(bytes, 0x00, bytes.Length);
-                    UInt32 _magic = BitConverter.ToUInt32(bytes);
-                    if (SBZ1.magic.Equals(_magic))
-                    {
-                        fileStream.Seek(0x00, SeekOrigin.Begin);
-                        SBZ1 sbz1 = new SBZ1(_isBigEndian);
-                        sbz1.Unpack(fileStream);
-                        // overwrite sbfFileStream as decompressed SBZ1
-                        sbz1.Decompress(fileStream, sbfFileStream);
-                    } else
-                    {
-                        fileStream.Seek(0x00, SeekOrigin.Begin);
-                        fileStream.CopyTo(sbfFileStream);
-                        fileStream.Seek(0x00, SeekOrigin.Begin);
-                    }
-                }
+                sbfBytes = SBZ1.DecompressAuto(fileBytes, out sizeFieldLe, out sizeFieldBe);
+            }
 
-                if (_onlyDecompress)
-                {
-                    string decompedSbfPath = $@"{_destPath}\{Path.GetFileNameWithoutExtension(_inputPath)}_decomp.sbf";
-                    using (FileStream decompedStream = new FileStream(decompedSbfPath, FileMode.Create, FileAccess.Write))
-                    {
-                        decompedStream.Write(sbfFileStream.ToArray());
-                    }
-                    Console.WriteLine("Decompress Done.");
-                    return;
-                }
+            if (_onlyDecompress)
+            {
+                Directory.CreateDirectory(_destPath);
+                string decompedSbfPath = $@"{_destPath}\{Path.GetFileNameWithoutExtension(_inputPath)}_decomp.sbf";
+                File.WriteAllBytes(decompedSbfPath, sbfBytes);
+                Console.WriteLine("Decompress Done.");
+                return;
+            }
 
+            _isBigEndian = SbfLayout.DetectBigEndian(sbfBytes);
+            Console.WriteLine($"Detected {(_isBigEndian ? "big-endian (PS3)" : "little-endian (PC)")} archive.");
+            if (_ps3Requested && !_isBigEndian)
+            {
+                Console.WriteLine("Warning: --ps3 was given but the file is little-endian (PC). Ignoring --ps3.");
+            }
+            if (compressed)
+            {
+                uint expected = _isBigEndian ? sizeFieldBe : sizeFieldLe;
+                if (expected != sbfBytes.Length)
+                {
+                    Console.WriteLine($"Warning: SBZ1 size field says 0x{expected:X} bytes but the zlib stream " +
+                                      $"decompressed to 0x{sbfBytes.Length:X} bytes.");
+                }
+            }
+
+            Directory.CreateDirectory(_destPath);
+            using (MemoryStream sbfFileStream = new MemoryStream(sbfBytes, false))
+            {
+                byte[] bytes;
                 string destDirectoryPath = $@"{_destPath}\{Path.GetFileNameWithoutExtension(_inputPath)}";
                 Directory.CreateDirectory(destDirectoryPath);
                 string metaDataPath = $@"{destDirectoryPath}\_meta";
                 Directory.CreateDirectory(metaDataPath);
+                EndianMarker.Write(metaDataPath, _isBigEndian);
                 List<string> destRelativePaths = new List<string>();
 
                 // Decompressed / RAW SBF file
-                sbfFileStream.Seek(0x14, SeekOrigin.Begin);
-                bytes = new byte[4];
-                sbfFileStream.Read(bytes, 0x00, bytes.Length);
-                if (_isBigEndian)
-                {
-                    Array.Reverse(bytes);
-                }
-                int length = BitConverter.ToInt32(bytes);
-                if(length < 1)
-                {
-                    Console.WriteLine("Invalid SBF file.");
-                    return;
-                }
+                int length = (int)SbfLayout.ReadU32(sbfBytes, 0x14, _isBigEndian);
+                sbfFileStream.Seek(0x18, SeekOrigin.Begin);
 
                 List<Entry> entrys = new List<Entry>();
                 for (int i = 0; i < length; i++)
@@ -243,17 +246,15 @@ namespace SegaRallyRevoTool
                     // 既知のサンプルでは発生しない防御的分岐。
                 }
 
-                // SBF Header
-                bytes = new byte[entrys[0].offset];
+                // SBF Header (グローバルヘッダー + エントリーテーブル + 最初のブロックまでのパディング)。
+                // 空アーカイブ (count = 0) はファイル全体をヘッダーとして保存する。
+                bytes = new byte[length > 0 ? entrys[0].offset : sbfBytes.Length];
                 sbfFileStream.Seek(0x00, SeekOrigin.Begin);
                 sbfFileStream.Read(bytes, 0x00, bytes.Length);
                 // Reversing for PS3 ver
                 if (_isBigEndian)
                 {
-                    for (int i = 0; i < bytes.Length; i += 4)
-                    {
-                        Array.Reverse(bytes, i, 4);
-                    }
+                    Ps3DdsUtil.DwordReverseInPlace(bytes, 0, bytes.Length & ~3);
                 }
                 using (FileStream sbfHeader = new FileStream($@"{metaDataPath}\_header.bin", FileMode.Create, FileAccess.Write))
                 {

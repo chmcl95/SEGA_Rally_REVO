@@ -66,6 +66,35 @@ namespace SegaRallyRevoTool.SegaRallyRevoLib
             }
         }
 
+        /// <summary>
+        /// エンディアンを知らずに SBZ1 ファイル全体 (fileBytes) を展開する。
+        /// +0x04 (展開後サイズ) は PC = LE / PS3 = BE なので両方の解釈を返し、
+        /// 呼び出し側がエンディアン判定後に照合する。
+        /// </summary>
+        public static byte[] DecompressAuto(byte[] fileBytes, out uint sizeFieldLe, out uint sizeFieldBe)
+        {
+            if (fileBytes.Length < 8)
+            {
+                throw new SbfFormatException("SBZ1 file is shorter than its 8-byte header");
+            }
+            sizeFieldLe = BitConverter.ToUInt32(fileBytes, 4);
+            sizeFieldBe = (uint)(fileBytes[4] << 24 | fileBytes[5] << 16 | fileBytes[6] << 8 | fileBytes[7]);
+
+            using (MemoryStream compressedStream = new MemoryStream(fileBytes, 8, fileBytes.Length - 8, false))
+            using (MemoryStream decompressedStream = new MemoryStream((int)Math.Min(Math.Min(sizeFieldLe, sizeFieldBe), 256u << 20)))
+            {
+                try
+                {
+                    new ZLib().Decompress(compressedStream, decompressedStream);
+                }
+                catch (Exception ex) when (!(ex is SbfFormatException))
+                {
+                    throw new SbfFormatException($"SBZ1 zlib stream could not be decompressed: {ex.Message}");
+                }
+                return decompressedStream.ToArray();
+            }
+        }
+
         public void Compress(Stream sbfFileStream, Stream sbz1FileStream)
         {
             byte[] uncompressed = new byte[sbfFileStream.Length];
