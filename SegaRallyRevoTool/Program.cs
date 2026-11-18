@@ -12,11 +12,9 @@ namespace SegaRallyRevoTool
             Console.WriteLine("Sega Rally Revo Tool - by chmcl95");
             Console.WriteLine();
 
-            Parser.Default.ParseArguments<UnpackVerbs, PackVerbs, ExportDdsVerbs, ImportDdsVerbs>(args)
+            Parser.Default.ParseArguments<UnpackVerbs, PackVerbs>(args)
                 .WithParsed<UnpackVerbs>(Unpack)
-                .WithParsed<PackVerbs>(Pack)
-                .WithParsed<ExportDdsVerbs>(ExportDds)
-                .WithParsed<ImportDdsVerbs>(ImportDds);
+                .WithParsed<PackVerbs>(Pack);
         }
 
         public static void Unpack(UnpackVerbs options)
@@ -41,17 +39,6 @@ namespace SegaRallyRevoTool
             {
                 Fail($"cannot unpack '{options.InputPath}': {ex.Message}");
                 return;
-            }
-
-            // PS3 (ビッグエンディアンと自動判定された場合) はアンパック後に標準 DDS を dds/ へ自動抽出する
-            if (unpacker.IsBigEndian && !options.OnlyDecompress)
-            {
-                string destDirectoryPath = $@"{outputPath}\{Path.GetFileNameWithoutExtension(options.InputPath)}";
-                if (Directory.Exists(destDirectoryPath))
-                {
-                    DdsExporter exporter = new DdsExporter(destDirectoryPath);
-                    exporter.Export();
-                }
             }
 
             return;
@@ -88,17 +75,6 @@ namespace SegaRallyRevoTool
                 // エンディアンは unpack が書いた _meta\_endian.txt から決める (無ければ --ps3)
                 isBigEndian = Packer.ResolveBigEndian(options.InputPath, options.IsBigEndian, out guessed);
 
-                // PS3 の場合は dds/ の内容を 4/ の生スライスへ自動で書き戻してからパックする
-                if (isBigEndian && Directory.Exists($@"{options.InputPath}\dds"))
-                {
-                    DdsImporter importer = new DdsImporter(options.InputPath);
-                    if (!importer.Import())
-                    {
-                        Fail("DDS import failed. Aborting pack.");
-                        return;
-                    }
-                }
-
                 Packer packer = new Packer(options.InputPath, outputPath, options.DisableCompress, isBigEndian);
                 packer.Pack();
             }
@@ -118,34 +94,6 @@ namespace SegaRallyRevoTool
         {
             Console.WriteLine($"Error: {message}");
             Environment.ExitCode = 1;
-        }
-
-        public static void ExportDds(ExportDdsVerbs options)
-        {
-            if (!Directory.Exists(options.InputPath))
-            {
-                Console.WriteLine($"'{options.InputPath}' does not exist.");
-                return;
-            }
-
-            DdsExporter exporter = new DdsExporter(options.InputPath);
-            exporter.Export();
-
-            return;
-        }
-
-        public static void ImportDds(ImportDdsVerbs options)
-        {
-            if (!Directory.Exists(options.InputPath))
-            {
-                Console.WriteLine($"'{options.InputPath}' does not exist.");
-                return;
-            }
-
-            DdsImporter importer = new DdsImporter(options.InputPath);
-            importer.Import();
-
-            return;
         }
     }
 
@@ -182,19 +130,5 @@ namespace SegaRallyRevoTool
         [Option("ps3", Required = false, HelpText = "Only needed for directories unpacked by an older version (without _meta\\_endian.txt): treat the archive as PS3 (big-endian).")]
         public bool IsBigEndian { get; set; }
 
-    }
-
-    [Verb("exportdds", HelpText = "Exports standard DDS files (dds/{i}.DDS) from a PS3 (--ps3) unpacked directory's raw 4/{i}.BIN slices.")]
-    public class ExportDdsVerbs
-    {
-        [Option('i', "input", Required = true, HelpText = "Unpacked directory (output of 'unpack --ps3').")]
-        public string InputPath { get; set; }
-    }
-
-    [Verb("importdds", HelpText = "Imports dds/{i}.DDS back into a PS3 (--ps3) unpacked directory's raw 4/{i}.BIN slices, so that 'pack --ps3' can regenerate the archive.")]
-    public class ImportDdsVerbs
-    {
-        [Option('i', "input", Required = true, HelpText = "Unpacked directory (output of 'unpack --ps3', containing a 'dds' subfolder from 'exportdds').")]
-        public string InputPath { get; set; }
     }
 }

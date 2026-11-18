@@ -197,7 +197,6 @@ def make(archive, out_dir, exe):
     name = os.path.basename(archive)
     stem, ext = os.path.splitext(name)
     raw, compressed = load(archive)
-    big = raw[:4] in (b"\0\0\0\3", b"\0\0\0\4")
     work = os.path.join(out_dir, "_work", stem)
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
@@ -211,7 +210,7 @@ def make(archive, out_dir, exe):
         p = os.path.join(work, variant, "p")
         run(exe, ["unpack", "-i", archive, "-o", u], log)
         udir = os.path.join(u, os.listdir(u)[0])
-        tex_dir = os.path.join(udir, "dds" if big else "4")
+        tex_dir = os.path.join(udir, "4")
         notes = []
         if variant != "A_identity" and os.path.isdir(tex_dir):
             files = sorted(f for f in os.listdir(tex_dir) if f.upper().endswith(".DDS"))
