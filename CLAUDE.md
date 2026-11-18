@@ -38,11 +38,9 @@ SegaRallyRevoTool pack -i <unpacked_dir> [-o <output_dir>]
 
 # パック・圧縮なし
 SegaRallyRevoTool pack -i <unpacked_dir> --nocomp
-
-# DDS 抽出/書き戻し (単体実行。通常は PS3 の unpack/pack が自動で行うので不要)
-SegaRallyRevoTool exportdds -i <unpacked_dir>
-SegaRallyRevoTool importdds -i <unpacked_dir>
 ```
+
+`exportdds` / `importdds` は 2026-11-18 に廃止した (PS3 でも `4/` に標準 DDS が直接出るため)。
 
 ### エンディアンの自動判定 (2026-11-12)
 
@@ -56,9 +54,10 @@ SegaRallyRevoTool importdds -i <unpacked_dir>
 - 出力の拡張子は `_header.bin` の +0x08 で決まる (0 以外 = VBF → `.vbf`、0 = `.sbf`)。
   以前は `--ps3` なら常に `.vbf` だったため、PS3 の `.sbf` が `.vbf` という名前で出力されていた
 
-### PC テクスチャ編集フロー (2026-11-12 実装)
+### テクスチャ編集フロー (PC は 2026-11-12、PS3 は 2026-11-18 から同じ手順)
 
-1. `unpack -i xxx.sbf` — `4/{i:D8}.DDS` は「DDS + 次のブロックまでのパディング」
+1. `unpack -i xxx.sbf` / `xxx.vbf` — `4/{i:D8}.DDS` が標準 DDS になる。
+   PC は「DDS + 次のブロックまでのパディング」、PS3 は「DDS ヘッダー 0x80 + ペイロード」ちょうど
 2. `4/{i:D8}.DDS` を別の DDS で置き換える (**サイズ・寸法・形式の変更も可**)
 3. `pack -i <unpacked_dir>` — DDS ヘッダーから次の値を再計算してパックする
    (作業ディレクトリのファイルは書き換えない)
@@ -77,7 +76,7 @@ DX10 拡張ヘッダーなど size を計算できない形式は、寸法が変
 
 ### PC (SBF) パック時の配置 (2026-11-12 実装、Document/SBF_format.md §8)
 
-PS3 の `.sbf` (type 4 を含まない BE の SBF) も同じ処理を通る。VBF は別処理 (「PS3 (VBF) の type4 分割アンパック / Pack 時の配置」を参照)。
+PS3 の `.sbf` (type 4 を含まない BE の SBF) も同じ処理を通る。VBF は別処理 (「PS3 (VBF) のアンパック / パック」を参照)。
 
 1. `.HEAD` + `.EXTRA` + データファイルを連結してブロックのバイト列を復元し、
    `type, hash, size, sub, nReloc, reloc[], nImport, import[], data, (type 5 のトレーラ)` を解析して
@@ -102,29 +101,8 @@ PS3 の `.sbf` (type 4 を含まない BE の SBF) も同じ処理を通る。VB
 - type 4 以外のデータを編集して長さを変えるときは、`.HEAD` の size も自分で更新すること。
   size より後ろに 0 以外のバイトが残っていると、出力に含めずに警告を出す
 
-### PS3 テクスチャ編集フロー (2026-07-15 実装)
-
-PS3 (BE) と判定されたアーカイブでは DDS 変換が自動で行われる:
-
-1. `unpack -i xxx.vbf` — 4/ への生スライス分割に加え、**標準 DDS を `dds/` へ自動抽出**
-   (BE ヘッダーを LE 化。通常のテクスチャエディタで開ける)
-2. `dds/{i:D8}.DDS` を編集する (**サイズ・寸法の変更も可**。4/ や _meta は触らない)
-3. `pack -i <unpacked_dir>` — **`dds/` の内容を 4/ へ自動で書き戻してから**パック
-
-書き戻し時に更新される値:
-
-| 対象 | 値 |
-|------|-----|
-| ExtraHeader +0x00 | 論理オフセット (累積再計算) |
-| ExtraHeader +0x04 / +0x08 | 幅 / 高さ (差し替え後の DDS ヘッダーから) |
-| ContainerHeader +0x08 | size = ミップ全段の合計 + 0xAC |
-
-`dds/` が存在しない場合 (type5 のみ等) は書き戻しをスキップ。書き戻し検証に失敗した場合は
-パックを中止する。書き出しは全コンテナぶんを組み立ててから一括で行うため、
-エラー時に作業ディレクトリが中途半端な状態になることはない。
-
-抽出される `dds/{i:D8}.DDS` は `0x80 + size - 0xAC` バイトちょうど
-(パディングを含まない正確な DDS) になる。
+PS3 の VBF も上の表の値を同じ規則で再計算する。VBF ではさらにデータポインタ (記述子 +0x04) と
+配置を毎回計算し直す (「PS3 (VBF) のアンパック / パック」)。
 
 ---
 
@@ -191,7 +169,7 @@ type==4 の `size` は次式で求まる (PC/PS3 のサンプル全 358 テク�
 size = DDS ヘッダーが宣言するミップ全段の合計バイト数 (キューブマップは × 6 面) + 0xAC
 ```
 
-テクスチャを差し替えたときはこの値の再計算が必要。PS3 は `DdsImporter`、PC は `Packer` が自動で行う。
+テクスチャを差し替えたときはこの値の再計算が必要。PC / PS3 とも `Packer` が自動で行う。
 (2026-11-12 までの `DdsHeader` はキューブマップの面数を数えていなかった。製品版のキューブマップは
 PC 57 枚 / PS3 2 枚)
 
@@ -268,10 +246,8 @@ DDSデータ[n]                                ← 末尾は EOF まで (末尾�
 > (2026-07-31 に修正。それ以前の実装はスライス内をヘッダー検索していたため、
 > 13 アーカイブで誤ったテクスチャを抽出していた)。
 
-Unpacker は論理値を境界に生スライスを 4/ へ保存し (バイト一致保証)、
-DDS 抽出/書き戻し (`dds/` フォルダ) は**生スライスを index 順に連結して物理バイト列を
-復元し、BE ヘッダーを出現順に type4 コンテナへ対応付ける**。
-詳細は「PS3 テクスチャ編集フロー」と DdsExporter.cs / DdsImporter.cs を参照。
+(この「論理値」の解釈は旧ツール時代のもの。正しくは記述子 +0x04 = `H_k - 0x1018 - 0x44k`。
+2026-11-18 以降のツールは論理スライスを使わない。「PS3 (VBF) のアンパック / パック」を参照)
 
 ---
 
@@ -280,22 +256,17 @@ DDS 抽出/書き戻し (`dds/` フォルダ) は**生スライスを index 順�
 ```
 <output_dir>/
   <filename>/
-    4/                      ← type4 Container のデータ (DDS / BIN)
-      00000000.DDS          (DDS マジックがあれば .DDS、なければ .BIN)
+    4/                      ← type4 Container のデータ (標準 DDS。PC / PS3 共通)
+      00000000.DDS          (PC: DDS + パディング。PS3: DDS ちょうど)
       00000001.DDS
       ...
     5/                      ← type5 Container のデータ (存在すれば)
-    dds/                    ← PS3 (VBF) のみ: 自動抽出された標準 DDS (編集用)
-      00000000.DDS             pack 時に 4/ へ自動で書き戻される
-      ...
     _meta/
       _endian.txt           ← アーカイブのエンディアン (LE / BE)。pack はこれに従う (2026-11-12 追加)
       _header.bin           ← SBF グローバルヘッダー + 元のエントリーテーブル + 最初のブロックまでの
                                パディング (空アーカイブはファイル全体)。pack は元のブロック位置を
                                ここから読む
       _order.txt            ← パック時の Container 順序
-      _predata.bin           ← PS3 (VBF) のみ: ヘッダー連続部の直後〜最初の DDS データ
-                                オフセットまでの未知領域 (生バイトのまま保存)
       00000000.HEAD         ← ContainerHeader (0x1C, 常に固定サイズ)
       00000001.HEAD
       00000001.EXTRA        ← ExtraHeader (0x28, type==4 のみ存在)
@@ -307,44 +278,45 @@ DDS 抽出/書き戻し (`dds/` フォルダ) は**生スライスを index 順�
 `.EXTRA` ファイルが存在するかどうかで type==4 か否かを判別する。
 Packer は `.EXTRA` の有無を `File.Exists()` で確認して挙動を切り替える。
 
-### PS3 (VBF) の type4 分割アンパック / Pack 時の配置
+### PS3 (VBF) のアンパック / パック (2026-11-18 に標準 DDS 直接出力へ変更)
 
-PC (SBF) と異なり PS3 (VBF) は ContainerHeader/ExtraHeader が全コンテナ分連続しているため、
-Unpacker は type4 コンテナについて ExtraHeader+0x00 (DDS絶対オフセット, .EXTRA 内では常に LE 保存)
-を境界として使い、`4/{index:D8}.{ext}` に 1 コンテナ 1 ファイルで分割抽出する。
+製品版 PS3 の VBF (テクスチャを含む 637 本 / 4050 テクスチャ) は、ブロック情報・DDS ヘッダー・
+ペイロード以外のバイト (mainEnd から最初の DDS ヘッダーまで、ペイロード後の 0x44 と 0x1000 境界までの埋め) が
+すべてゼロ。したがって VBF は「`_header.bin` + `.HEAD` / `.EXTRA` + 標準 DDS」だけから作り直せる。
 
-- コンテナ `i` のデータ範囲: `[ExtraHeader[i].+0x00, ExtraHeader[i+1].+0x00)` (最後のコンテナは EOF まで)
-  → 前述の「未知領域」はこの範囲にそのまま含まれる (直前のデータの一部として保存される)
-- ヘッダー連続部の直後〜最初の DDS オフセットまでの隙間は `_meta\_predata.bin` に保存
-- type4 コンテナが 1 つも無い場合 (type5 のみの `.sbf`/`.vbf` など) は分割を行わず、
-  従来どおり Entry オフセットベースで最後の Container に残りデータを丸ごと割り当てる
-  raw 方式にフォールバックする (`_predata.bin` は出力されない)
+Unpacker:
 
-Packer 側 (`BuildVbf`、`_isBigEndian` かつ `_meta\_predata.bin` が存在する場合。2026-11-12 に
-Document/SBF_format.md §6.4.2 の規則で書き直し) は:
+- 各テクスチャの DDS ヘッダー位置 H_k を Document/SBF_format.md §6.4.2 の規則で求め
+  (規則どおりでなければ dword 反転マジック `" SDD"` を出現順に探す。旧ツールで再パックした壊れたファイル用)、
+  ヘッダーを dword 反転して標準 DDS にしたもの + ペイロード (size - 0xAC) を `4/{i:D8}.DDS` に書く
+- テクスチャ以外に 0 以外のバイトがあれば、保存されない旨を警告する (製品版では出ない)
+- type4 を含まない BE アーカイブ (PS3 の `.sbf`) は従来どおり SBF の処理
 
-1. `.HEAD` + `.EXTRA` (計 0x44) を読み、type 4 かつ nReloc = nImport = 0 であることを確かめる。
-   ペイロード長 = size - 0xAC
-2. `_predata.bin` + `4/*.BIN` を連結して元ファイルの mainEnd 以降の物理バイト列を復元する
-   (スライス境界は論理オフセットなので意味は無い)。各テクスチャの DDS ヘッダー位置 H_k は
-   規則どおりの位置にあればそれを使い、無ければ dword 反転マジック `" SDD"` を出現順に探す
-3. 規則どおりに並べ直す:
+Packer (`BuildVbf`、`_header.bin` の +0x08 が 0 以外でブロック数 > 0 のとき):
+
+1. `.HEAD` + `.EXTRA` (計 0x44) を読み、type 4 かつ nReloc = nImport = 0 であることを確かめる
+2. `4/{k}.DDS` を読み、PC と同じ規則で差し替えを判定して size / 幅 / 高さ / 2D・キューブマップを更新する。
+   ミップチェーンより後ろの余分なバイトは捨てる
+3. 規則どおりに並べる (テクスチャ以外はゼロ):
    - ブロックヘッダー + 記述子を `_header.bin` の直後 (0x1000) から 0x44 ずつ並べ、
      グローバル +0x08 = mainEnd = 0x1000 + 0x44n
    - `H_0 = roundUp(mainEnd, 0x1000) + 0x1000 - 0x80`、
      `H_{k+1} = roundUp(H_k + 0x80 + payloadLen_k + 0x44 + 0x80, 0x1000) - 0x80`、
      EOF = 最終ペイロードの終端
    - 記述子 +0x04 (データポインタ) = `H_k - 0x1018 - 0x44k` を毎回計算し直す
-4. 位置が元と変わらない区間のパディング (ペイロード後のゼロ 0x44 + 0x1000 境界までの埋め) は
-   元のバイトをそのまま使う。ずれた区間はゼロで埋める
 
-- 検証: 製品版 PS3 の VBF 816 本で unpack → pack --nocomp が 815 本バイト一致。
-  残り 1 本は壊れた mod の `livery55_data.vbf` で、テクスチャ 1 のデータポインタが
-  `0xACAA0` → `0xACF24` に直り、`tools/sbf_inspect.py --validate` を通る
-  (`dds/` を消して DdsImporter を通さない場合も同じ出力になる)
-- テクスチャ間で DDS を入れ替えて全テクスチャのサイズを変えた場合 (5 / 8 / 2 枚の VBF) も、
-  出力は `--validate` を通り、再アンパックした DDS は入れ替え後の内容と一致した
+旧バージョン (2026-11-17 以前) のアンパック結果 (`_meta\_predata.bin` + `4/*.BIN` の生スライス + 編集用の `dds/`) も
+pack できる: `dds/{k}.DDS` があればそれを使い、無ければ `_predata.bin` + 生スライスを連結した
+物理バイト列からテクスチャを取り出す。
+
+- 検証 (2026-11-18): 製品版の全アーカイブで unpack → pack --nocomp がバイト一致
+  (PS3 VBF 816 / 816、PS3 `.sbf` 743 / 743、PC `.sbf` 1203 / 1203。壊れた mod 1 本はポインタが直る差のみ)。
+  旧形式のアンパック結果 66 本も新しい pack で元と一致し、旧形式の `dds/` と新形式の `4/` に同じ編集をした出力も一致。
+  `tools/make_test_variants.py` で作り直した livery55 の A〜D (PC / PS3) と E は、
+  2026-11-14〜15 にゲームで確認したファイルと圧縮後までバイト一致
 - テクスチャの追加・削除はできない (`_header.bin` のブロック数と `.HEAD` の数が違えばエラー)
+- 壊れた mod の `livery55_data.vbf` は、pack するとテクスチャ 1 のデータポインタが
+  `0xACAA0` → `0xACF24` に直る (2026-11-14 に RPCS3 で表示を確認)
 
 ---
 
@@ -355,14 +327,12 @@ SegaRallyRevoTool.sln
 SegaRallyRevoTool/
   Program.cs                      ← CLI エントリポイント・Verb 定義
   Unpacker.cs                     ← アンパック処理
-  Packer.cs                       ← パック処理
-  DdsExporter.cs                  ← PS3 生スライス → 標準 DDS 抽出
-  DdsImporter.cs                  ← 標準 DDS → PS3 生スライス書き戻し (サイズ変更対応)
+  Packer.cs                       ← パック処理 (BuildSbf / BuildVbf)
   SegaRallyRevoLib/
     SBF.cs                        ← Entry / Container クラス
     SBZ1.cs                       ← SBZ1 圧縮フォーマット
     SbfLayout.cs                  ← エンディアン判定・ブロック構造の解析・§8 配置規則・_endian.txt
-    Ps3DdsUtil.cs                 ← BE DDS ヘッダー検出・dword 反転ヘルパー・レイアウト定数
+    Ps3DdsUtil.cs                 ← VBF のテクスチャ位置の特定・BE DDS ヘッダー検出・dword 反転ヘルパー
     DdsHeader.cs                  ← LE DDS ヘッダー解釈 (幅/高さ/ミップ合計サイズ算出。キューブマップ対応)
 ```
 
@@ -447,8 +417,8 @@ PC 版 (`SEGA Rally Revo_HCJ`) と PS3 版 (RPCS3) で読み込ませた。**全
 
 ## 既知の未解決事項
 
-- テクスチャ間の 0x44 バイト gap の意味は未解明 (実測では常にゼロ。書き戻し時は
-  不透明バイトとして再利用している)
+- テクスチャ間の 0x44 バイト gap は「先頭へ移したヘッダー + 記述子の空き席」と解釈している
+  (Document/SBF_format.md)。製品版では常にゼロで、pack もゼロを書く
 - サイズ変更した VBF は RPCS3 で動作確認済み (2026-11-14)。PS3 の実機では未検証
 - サイズ変更した PC の SBF は livery (テクスチャ 2 枚 + type 5) で動作確認済み (2026-11-15)。
   製品版で「規則から外れて詰めて置かれていた」ブロック (`*_model.sbf` のテクスチャなど) は、
